@@ -1,5 +1,5 @@
-use std::{fs,str};
 use crate::score::english_score;
+use std::{fs, str};
 
 /// Represents a possible value of a brute forced on a single byte xor cipher
 #[derive(Default)]
@@ -10,14 +10,16 @@ pub struct BruteForceGuess {
 }
 
 /// Accepts two hexadecimal encoded strings of equal length and produces their XORed output
-pub fn fixed_xor(input1: String, input2: String) -> Result<String, hex::FromHexError> {
-    assert_eq!(input1.len(), input2.len(), "input lengths unequal");
+pub fn fixed_xor_hex(input1: String, input2: String) -> Result<String, hex::FromHexError> {
     let i1 = hex::decode(input1)?;
     let i2 = hex::decode(input2)?;
 
-    let out: Vec<u8> = i1.iter().zip(i2.iter()).map(|(x, y)| x ^ y).collect();
+    Ok(hex::encode(fixed_xor(i1.as_slice(), i2.as_slice())))
+}
 
-    Ok(hex::encode(out))
+pub fn fixed_xor(i1: &[u8], i2: &[u8]) -> Vec<u8> {
+    assert_eq!(i1.len(), i2.len(), "input lengths unequal");
+    i1.iter().zip(i2.iter()).map(|(x, y)| x ^ y).collect()
 }
 
 pub fn decrypt_single_byte_xor_cipher(input: String) -> Result<String, hex::FromHexError> {
@@ -26,11 +28,7 @@ pub fn decrypt_single_byte_xor_cipher(input: String) -> Result<String, hex::From
     score_decrypted_strings(&mut guesses);
 
     // return best guess
-    Ok(guesses
-        .last()
-        .unwrap_or(&Default::default())
-        .output
-        .clone())
+    Ok(guesses.last().unwrap_or(&Default::default()).output.clone())
 }
 
 pub fn find_single_byte_xor_encrypted_string() -> Result<String, hex::FromHexError> {
@@ -67,7 +65,11 @@ pub fn decrypt_single_byte_xor(bytes: Vec<u8>) -> Vec<BruteForceGuess> {
             // Ignore strings with invalid characters
             Err(_e) => continue,
         };
-        guesses.push(BruteForceGuess{output: decrypted_string, key: key.clone(), score: 0});
+        guesses.push(BruteForceGuess {
+            output: decrypted_string,
+            key: key.clone(),
+            score: 0,
+        });
     }
 
     guesses

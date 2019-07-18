@@ -1,8 +1,9 @@
 #![allow(dead_code, unused_imports)]
 
-use std::{fs, str};
 
-mod aes;
+use rand::Rng;
+use std::{fs, str};
+mod aes128;
 mod encoding;
 mod score;
 mod vigenere;
@@ -24,7 +25,7 @@ fn test_hex_to_base64() {
 #[test]
 fn test_fixed_xor() {
     assert_eq!(
-        xor::fixed_xor(
+        xor::fixed_xor_hex(
             "1c0111001f010100061a024b53535009181c".to_string(),
             "686974207468652062756c6c277320657965".to_string()
         )
@@ -81,20 +82,24 @@ fn test_break_repeating_xor_key() {
 // Set 1 Challenge 7
 #[test]
 fn test_aes_128_ecb_decrypt() {
-    let key = "YELLOW SUBMARINE".as_bytes();
-    let content = fs::read_to_string("./test_input/set1challenge7.txt").unwrap();
+    let plaintext = "I\'m back and I\'m ringin\' the bell \nA rockin\' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that\'s my DJ Deshay cuttin\' all them Z\'s \nHittin\' hard and the girlies goin\' crazy \nVanilla\'s on the mike, man I\'m not lazy. \n\nI\'m lettin\' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse\'s to the side yellin\', Go Vanilla Go! \n\nSmooth \'cause that\'s the way I will be \nAnd if you don\'t give a damn, then \nWhy you starin\' at me \nSo get off \'cause I control the stage \nThere\'s no dissin\' allowed \nI\'m in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n\' play \n\nStage 2 -- Yea the one ya\' wanna listen to \nIt\'s off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI\'m an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI\'m like Samson -- Samson to Delilah \nThere\'s no denyin\', You can try to hang \nBut you\'ll keep tryin\' to get my style \nOver and over, practice makes perfect \nBut not if you\'re a loafer. \n\nYou\'ll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I\'m comin\' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin\' \nVanilla Ice is sellin\' and you people are buyin\' \n\'Cause why the freaks are jockin\' like Crazy Glue \nMovin\' and groovin\' trying to sing along \nAll through the ghetto groovin\' this here song \nNow you\'re amazed by the VIP posse. \n\nSteppin\' so hard like a German Nazi \nStartled by the bases hittin\' ground \nThere\'s no trippin\' on mine, I\'m just gettin\' down \nSparkamatic, I\'m hangin\' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n\'89 in my time! You, \'90 is my year. \n\nYou\'re weakenin\' fast, YO! and I can tell it \nYour body\'s gettin\' hot, so, so I can smell it \nSo don\'t be mad and don\'t be sad \n\'Cause the lyrics belong to ICE, You can call me Dad \nYou\'re pitchin\' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don\'t be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you\'re dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
 
-    let output = aes::decrypt_aes_128_ecb(
-        base64::decode(&content.lines().collect::<String>())
+    let key = "YELLOW SUBMARINE".as_bytes();
+    let ciphertext = base64::decode(
+        &fs::read_to_string("./test_input/set1challenge7.txt")
             .unwrap()
-            .as_slice(),
-        key,
+            .lines()
+            .collect::<String>(),
     )
     .unwrap();
 
-    let plaintext = str::from_utf8(&output).unwrap();
+    let decrypted = aes128::ecb::decrypt(ciphertext.as_slice(), key).unwrap();
+    let decrypted_string = str::from_utf8(&decrypted).unwrap();
 
-    assert_eq!("I\'m back and I\'m ringin\' the bell \nA rockin\' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that\'s my DJ Deshay cuttin\' all them Z\'s \nHittin\' hard and the girlies goin\' crazy \nVanilla\'s on the mike, man I\'m not lazy. \n\nI\'m lettin\' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse\'s to the side yellin\', Go Vanilla Go! \n\nSmooth \'cause that\'s the way I will be \nAnd if you don\'t give a damn, then \nWhy you starin\' at me \nSo get off \'cause I control the stage \nThere\'s no dissin\' allowed \nI\'m in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n\' play \n\nStage 2 -- Yea the one ya\' wanna listen to \nIt\'s off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI\'m an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI\'m like Samson -- Samson to Delilah \nThere\'s no denyin\', You can try to hang \nBut you\'ll keep tryin\' to get my style \nOver and over, practice makes perfect \nBut not if you\'re a loafer. \n\nYou\'ll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I\'m comin\' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin\' \nVanilla Ice is sellin\' and you people are buyin\' \n\'Cause why the freaks are jockin\' like Crazy Glue \nMovin\' and groovin\' trying to sing along \nAll through the ghetto groovin\' this here song \nNow you\'re amazed by the VIP posse. \n\nSteppin\' so hard like a German Nazi \nStartled by the bases hittin\' ground \nThere\'s no trippin\' on mine, I\'m just gettin\' down \nSparkamatic, I\'m hangin\' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n\'89 in my time! You, \'90 is my year. \n\nYou\'re weakenin\' fast, YO! and I can tell it \nYour body\'s gettin\' hot, so, so I can smell it \nSo don\'t be mad and don\'t be sad \n\'Cause the lyrics belong to ICE, You can call me Dad \nYou\'re pitchin\' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don\'t be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you\'re dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n", plaintext);
+    assert_eq!(plaintext, decrypted_string);
+
+    let encrypted = aes128::ecb::encrypt(plaintext.as_bytes(), key).unwrap();
+    assert_eq!(ciphertext, encrypted);
 }
 
 // Set 1 Challenge 8
@@ -104,18 +109,73 @@ fn test_detect_aes() {
 
     for (i, line) in content.lines().enumerate() {
         if i == 132 {
-            assert!(aes::detect_aes_ecb(line.as_bytes()));
+            assert!(aes128::ecb::detect(line.as_bytes()));
         } else {
-            assert!(!aes::detect_aes_ecb(line.as_bytes()));
+            assert!(!aes128::ecb::detect(line.as_bytes()));
         }
     }
 }
 
-// Set 1 Challenge 9
+// Set 2 Challenge 9
 #[test]
-fn test_pkcs7_padded() {
+fn test_pkcs7() {
+    let mut test = "YELLOW SUBMARINE".to_string().into_bytes();
+    encoding::pkcs7_encode(&mut test, 20);
+    assert_eq!("YELLOW SUBMARINE\x04\x04\x04\x04".as_bytes().to_vec(), test);
+
+    encoding::pkcs7_decode(&mut test, 20);
+    assert_eq!("YELLOW SUBMARINE".to_string().into_bytes(), test);
+
+    encoding::pkcs7_encode(&mut test, 16);
     assert_eq!(
-        "YELLOW SUBMARINE\x04\x04\x04\x04".as_bytes().to_vec(),
-        encoding::pkcs7_padded("YELLOW SUBMARINE".to_string().into_bytes(), 20)
+        "YELLOW SUBMARINE\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10"
+            .as_bytes()
+            .to_vec(),
+        test
+    );
+    println!("h {:?}", test);
+
+    encoding::pkcs7_decode(&mut test, 16);
+    assert_eq!("YELLOW SUBMARINE".to_string().into_bytes(), test);
+}
+
+// Set 2 Challenge 10
+#[test]
+fn test_aes_cbc() {
+    let plaintext = "I\'m back and I\'m ringin\' the bell \nA rockin\' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that\'s my DJ Deshay cuttin\' all them Z\'s \nHittin\' hard and the girlies goin\' crazy \nVanilla\'s on the mike, man I\'m not lazy. \n\nI\'m lettin\' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse\'s to the side yellin\', Go Vanilla Go! \n\nSmooth \'cause that\'s the way I will be \nAnd if you don\'t give a damn, then \nWhy you starin\' at me \nSo get off \'cause I control the stage \nThere\'s no dissin\' allowed \nI\'m in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n\' play \n\nStage 2 -- Yea the one ya\' wanna listen to \nIt\'s off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI\'m an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI\'m like Samson -- Samson to Delilah \nThere\'s no denyin\', You can try to hang \nBut you\'ll keep tryin\' to get my style \nOver and over, practice makes perfect \nBut not if you\'re a loafer. \n\nYou\'ll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I\'m comin\' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin\' \nVanilla Ice is sellin\' and you people are buyin\' \n\'Cause why the freaks are jockin\' like Crazy Glue \nMovin\' and groovin\' trying to sing along \nAll through the ghetto groovin\' this here song \nNow you\'re amazed by the VIP posse. \n\nSteppin\' so hard like a German Nazi \nStartled by the bases hittin\' ground \nThere\'s no trippin\' on mine, I\'m just gettin\' down \nSparkamatic, I\'m hangin\' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n\'89 in my time! You, \'90 is my year. \n\nYou\'re weakenin\' fast, YO! and I can tell it \nYour body\'s gettin\' hot, so, so I can smell it \nSo don\'t be mad and don\'t be sad \n\'Cause the lyrics belong to ICE, You can call me Dad \nYou\'re pitchin\' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don\'t be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you\'re dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
+    let key = b"YELLOW SUBMARINE";
+    let iv: [u8; 16] = [0; 16];
+    let ciphertext = base64::decode(
+        &fs::read_to_string("./test_input/set2challenge10.txt")
+            .unwrap()
+            .lines()
+            .collect::<String>(),
     )
+    .unwrap();
+
+    let decrypted_bytes = aes128::cbc::decrypt(&ciphertext, key, &iv).unwrap();
+    let decrypted_string = str::from_utf8(&decrypted_bytes).unwrap();
+    assert_eq!(plaintext, decrypted_string);
+
+    let encrypted_bytes = aes128::cbc::encrypt(&decrypted_bytes, key, &iv).unwrap();
+    assert_eq!(ciphertext, encrypted_bytes);
+}
+
+// Set 2 Challenge 11
+#[test]
+fn test_ecb_detection() {
+    let mut ecb_count = 0;
+    let repeating_key = b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    for _ in 0..10 {
+        let mut input: Vec<u8> = (0..2048).map(|_| rand::random::<u8>()).collect();
+        input.splice(0..0, repeating_key.iter().cloned());
+        input.append(&mut repeating_key.to_vec());
+        let out = aes128::encryption_oracle(&input.to_vec()).unwrap();
+        if aes128::ecb::detect(&out) {
+            ecb_count += 1;
+        }
+    }
+
+    assert!(ecb_count > 1);
 }
