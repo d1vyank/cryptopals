@@ -2,6 +2,7 @@
 
 
 use rand::Rng;
+use std::io::Write;
 use std::{fs, str};
 mod aes128;
 mod encoding;
@@ -109,9 +110,9 @@ fn test_detect_aes() {
 
     for (i, line) in content.lines().enumerate() {
         if i == 132 {
-            assert!(aes128::ecb::detect(line.as_bytes()));
+            assert!(aes128::ecb::detect(line.as_bytes(), 16));
         } else {
-            assert!(!aes128::ecb::detect(line.as_bytes()));
+            assert!(!aes128::ecb::detect(line.as_bytes(), 16));
         }
     }
 }
@@ -172,10 +173,17 @@ fn test_ecb_detection() {
         input.splice(0..0, repeating_key.iter().cloned());
         input.append(&mut repeating_key.to_vec());
         let out = aes128::encryption_oracle(&input.to_vec()).unwrap();
-        if aes128::ecb::detect(&out) {
+        if aes128::ecb::detect(&out, 16) {
             ecb_count += 1;
         }
     }
 
     assert!(ecb_count > 1);
+}
+
+// Set 2 Challenge 12
+#[test]
+fn test_break_aes_ecb() {
+    assert_eq!("Rollin\' in my 5.0\nWith my rag-top down so my hair can blow\nThe girlies on standby waving just to say hi\nDid you stop? No, I just drove by\n",
+    aes128::decrypt_aes_ecb_byte_at_a_time());
 }

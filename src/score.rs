@@ -7,6 +7,11 @@ pub fn english_score(s: &String) -> u32 {
     score
 }
 
+pub fn english_char_set() -> Vec<char> {
+    "abcdefghijklmnopqrstuvwxyz \'\"!@#$%^&*()-_=+:;{}[]\\|,<>./?~ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890\n"
+    .chars().collect()
+}
+
 //From https://en.wikipedia.org/wiki/Letter_frequency
 fn char_freqs(c: char) -> u32 {
     match c {
