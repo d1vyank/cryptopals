@@ -1,11 +1,11 @@
 #![allow(dead_code, unused_imports)]
 
-
 use rand::Rng;
 use std::io::Write;
 use std::{fs, str};
 mod aes128;
 mod encoding;
+mod query_string;
 mod score;
 mod vigenere;
 mod xor;
@@ -186,4 +186,30 @@ fn test_ecb_detection() {
 fn test_break_aes_ecb() {
     assert_eq!("Rollin\' in my 5.0\nWith my rag-top down so my hair can blow\nThe girlies on standby waving just to say hi\nDid you stop? No, I just drove by\n",
     aes128::decrypt_aes_ecb_byte_at_a_time());
+}
+
+
+// Set 2 Challenge 13
+#[test]
+fn test_ecb_cut_paste() {
+    let result = query_string::parse("foo=bar&baz=qux&zap=zazzle".to_string());
+    assert_eq!(result.get("foo").unwrap(), "bar");
+    assert_eq!(result.get("baz").unwrap(), "qux");
+    assert_eq!(result.get("zap").unwrap(), "zazzle");
+
+    assert_eq!(
+        query_string::profile_for("foo@bar.com".to_string()),
+        "email=foo%40bar.com&uid=10&role=user"
+    );
+
+    assert_eq!(
+        query_string::profile_for("foo@bar.com&role=admin".to_string()),
+        "email=foo%40bar.com%26role%3Dadmin&uid=10&role=user"
+    );
+
+    let admin_query_string_ciphertext = query_string::generate_admin_profile();
+    let admin_query_string_plaintext =
+        query_string::decrypt_profile_oracle(admin_query_string_ciphertext);
+    let kv_pairs = query_string::parse(admin_query_string_plaintext);
+    assert_eq!(kv_pairs.get("role").unwrap(), "admin");
 }
