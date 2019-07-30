@@ -1,8 +1,8 @@
 use openssl::error::ErrorStack;
 use rand::distributions::Alphanumeric;
+use rand::rngs::SmallRng;
 use rand::{thread_rng, Rng, SeedableRng};
 use std::collections::HashMap;
-use std::str;
 
 use crate::score;
 
@@ -130,20 +130,46 @@ pub fn decrypt_aes_ecb_byte_at_a_time() -> String {
     // Using long repeated input to detect ecb mode
     let long_repeating_string: String = (0..(2 * block_size)).map(|_| "A").collect();
     let is_ecb = ecb::detect(
-        &ecb_encryption_oracle(long_repeating_string.as_bytes()).unwrap(),
+        &ecb_encryption_oracle(long_repeating_string.as_bytes()),
         block_size,
     );
-
 
     if !is_ecb {
         panic!("only ecb mode supported");
     }
+    decrypt_aes_ecb(&ecb_encryption_oracle, block_size, 0)
+}
 
+pub fn decrypt_aes_ecb_padded_byte_at_a_time() -> String {
+    let block_size = 16;
+    let padding_size = detect_padding_size(block_size);
+
+
+    decrypt_aes_ecb(&ecb_encryption_oracle_padded, block_size, padding_size)
+}
+
+
+fn decrypt_aes_ecb(
+    oracle: &Fn(&[u8]) -> Vec<u8>,
+    block_size: usize,
+    padding_size: usize,
+) -> String {
+    let mut num_padding_blocks: usize = padding_size / block_size;
+    let remaining_padding_bytes = padding_size % block_size;
+    let mut prefix_string: String = Default::default();
+
+    if remaining_padding_bytes != 0 {
+        num_padding_blocks += 1;
+        prefix_string = (0..(block_size - remaining_padding_bytes))
+            .map(|_| "A")
+            .collect();
+    }
+
+    let ciphertext_len = oracle(&[]).len() - padding_size;
     // set of characters used for guessing plaintext bytes
     let charset: Vec<char> = score::english_char_set();
     // map of all possible values of the last byte of the block (which is the byte being decrypted)
     let mut guessed_blocks: HashMap<Vec<u8>, String>;
-    let ciphertext_len = ecb_encryption_oracle(&[]).unwrap().len();
     // supply `block_size - 1` random bytes to oracle to be prepended to the
     // unknown string. this shifts the target byte to the end of the first block
     let mut oracle_input: String = thread_rng()
@@ -152,7 +178,6 @@ pub fn decrypt_aes_ecb_byte_at_a_time() -> String {
         .collect();
     let mut plaintext: String = Default::default();
     let mut curr_decrypted_block: String = Default::default();
-
 
     // for each block in ciphertext
     for block_index in (0..ciphertext_len).step_by(block_size) {
@@ -164,15 +189,21 @@ pub fn decrypt_aes_ecb_byte_at_a_time() -> String {
                 let guessed_plaintext =
                     oracle_input.to_string() + &curr_decrypted_block.to_string() + &c.to_string();
                 let guessed_ciphertext =
-                    ecb_encryption_oracle(guessed_plaintext.as_bytes()).unwrap();
+                    oracle((prefix_string.clone() + &guessed_plaintext).as_bytes());
                 guessed_blocks.insert(
-                    guessed_ciphertext[0..block_size].to_vec(),
+                    guessed_ciphertext[num_padding_blocks * block_size
+                        ..(num_padding_blocks * block_size) + block_size]
+                        .to_vec(),
                     guessed_plaintext,
                 );
             }
 
             // supply prepared input to oracle
-            let manipulated_ciphertext = &ecb_encryption_oracle(&oracle_input.as_bytes()).unwrap();
+            let mut manipulated_ciphertext =
+                oracle((prefix_string.clone() + &oracle_input).as_bytes());
+            manipulated_ciphertext =
+                manipulated_ciphertext[num_padding_blocks * block_size..].to_vec();
+
             // the prepared input manipulates the ciphertext by placing the byte we are trying to
             // guess at the end of the current block
             // pick the plaintext corresponding to the current block of the manipulated
@@ -185,7 +216,6 @@ pub fn decrypt_aes_ecb_byte_at_a_time() -> String {
                 // We've hit padding, stop.
                 None => break,
             };
-
             curr_decrypted_block.push(decrypted_char);
             // if we're not on the last byte in block, remove first byte of oracle input to shift
             // target byte left
@@ -194,6 +224,9 @@ pub fn decrypt_aes_ecb_byte_at_a_time() -> String {
             }
         }
 
+        if curr_decrypted_block.len() == 0 {
+            break;
+        }
         oracle_input = curr_decrypted_block[1..].to_string();
         plaintext.push_str(&curr_decrypted_block);
         curr_decrypted_block = Default::default();
@@ -201,6 +234,50 @@ pub fn decrypt_aes_ecb_byte_at_a_time() -> String {
 
 
     plaintext
+}
+
+fn detect_padding_size(block_size: usize) -> usize {
+    // Use three blocks worth of reepeating bytes and find what the corresponding
+    // ciphertext looks like
+    let long_repeating_string: String = (0..(3 * block_size)).map(|_| "A").collect();
+    let mut our_block = vec![];
+    let bytes = ecb_encryption_oracle_padded(long_repeating_string.as_bytes());
+    for (i, _) in bytes.iter().enumerate().step_by(block_size) {
+        for (j, _) in bytes.iter().enumerate().step_by(block_size) {
+            if i == j {
+                continue;
+            }
+            if bytes[i..i + block_size] == bytes[j..j + block_size] {
+                our_block = bytes[i..i + block_size].to_vec();
+            }
+        }
+    }
+
+    // Now find min number of repeating bytes required to produce ciphertext corresponding to
+    // 'our_block'
+    let mut long_repeating_string: String = (0..(2 * block_size)).map(|_| "A").collect();
+    let mut our_block_offset = 0;
+    let padding_size;
+    let mut block_found;
+    loop {
+        block_found = false;
+        let bytes = ecb_encryption_oracle_padded(long_repeating_string.as_bytes());
+        for (i, _) in bytes.iter().enumerate().step_by(block_size) {
+            if bytes[i..i + block_size] == our_block[..] {
+                our_block_offset = i;
+                block_found = true;
+            }
+        }
+
+        if !block_found {
+            padding_size = our_block_offset + block_size - long_repeating_string.len() - 1;
+
+            break;
+        }
+        long_repeating_string.pop();
+    }
+
+    padding_size
 }
 
 fn detect_block_size() -> usize {
@@ -212,7 +289,7 @@ fn detect_block_size() -> usize {
             repeated_input.push('A');
         }
 
-        let out = ecb_encryption_oracle(repeated_input.as_bytes()).unwrap();
+        let out = ecb_encryption_oracle(repeated_input.as_bytes());
         // take 'i' size blocks from output and check for repetition.
         if out[0..i] == out[i..(i + i)] {
             return i;
@@ -221,15 +298,26 @@ fn detect_block_size() -> usize {
     panic!("block size not detected");
 }
 
-fn ecb_encryption_oracle(bytes: &[u8]) -> Result<Vec<u8>, ErrorStack> {
-    let key: [u8; 16] = rand::rngs::StdRng::seed_from_u64(1234).gen();
+fn ecb_encryption_oracle(bytes: &[u8]) -> Vec<u8> {
+    let key: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
 
     let mut unknown_string = base64::decode("Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK").unwrap();
     let mut bytes = bytes.to_vec();
 
     bytes.append(&mut unknown_string);
 
-    return ecb::encrypt(&bytes, &key.to_vec());
+    return ecb::encrypt(&bytes, &key.to_vec()).unwrap();
+}
+
+// Prefixes a random but constant number of random bytes to the input provided to the oracle
+fn ecb_encryption_oracle_padded(bytes: &[u8]) -> Vec<u8> {
+    let n: usize = SmallRng::seed_from_u64(123456).gen_range(0, 40);
+    let mut padding = vec![];
+    for i in 0..n {
+        padding.push(SmallRng::seed_from_u64(i as u64).gen());
+    }
+    padding.extend_from_slice(bytes);
+    ecb_encryption_oracle(&padding)
 }
 
 /// Generates a random 16 byte key

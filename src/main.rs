@@ -168,7 +168,7 @@ fn test_ecb_detection() {
     let mut ecb_count = 0;
     let repeating_key = b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-    for _ in 0..10 {
+    for _ in 0..50 {
         let mut input: Vec<u8> = (0..2048).map(|_| rand::random::<u8>()).collect();
         input.splice(0..0, repeating_key.iter().cloned());
         input.append(&mut repeating_key.to_vec());
@@ -212,4 +212,33 @@ fn test_ecb_cut_paste() {
         query_string::decrypt_profile_oracle(admin_query_string_ciphertext);
     let kv_pairs = query_string::parse(admin_query_string_plaintext);
     assert_eq!(kv_pairs.get("role").unwrap(), "admin");
+}
+
+// Set 2 Challenge 14
+#[test]
+fn test_break_aes_ecb_padded() {
+    assert_eq!("Rollin\' in my 5.0\nWith my rag-top down so my hair can blow\nThe girlies on standby waving just to say hi\nDid you stop? No, I just drove by\n",
+    aes128::decrypt_aes_ecb_padded_byte_at_a_time());
+}
+
+// Set 2 Challenge 15
+#[test]
+fn test_valid_pkcs7() {
+    let result = std::panic::catch_unwind(|| {
+        encoding::pkcs7_decode(
+            &mut "ICE ICE BABY\x05\x05\x05\x05".to_string().into_bytes(),
+            16,
+        )
+    });
+
+    assert!(result.is_err());
+
+    let result = std::panic::catch_unwind(|| {
+        encoding::pkcs7_decode(
+            &mut "ICE ICE BABY\x01\x02\x03\x04".to_string().into_bytes(),
+            16,
+        )
+    });
+
+    assert!(result.is_err());
 }
