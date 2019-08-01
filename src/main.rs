@@ -242,3 +242,11 @@ fn test_valid_pkcs7() {
 
     assert!(result.is_err());
 }
+
+// Set 2 Challenge 16
+#[test]
+fn test_cbc_bitflipping() {
+    assert!(aes128::is_bitflipped_ciphertext_admin(
+        aes128::cbc_bitflipping_attack()
+    ));
+}

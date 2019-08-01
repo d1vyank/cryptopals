@@ -4,7 +4,9 @@ use rand::rngs::SmallRng;
 use rand::{thread_rng, Rng, SeedableRng};
 use std::collections::HashMap;
 
+use crate::encoding;
 use crate::score;
+use crate::xor;
 
 pub mod ecb {
     use openssl::error::ErrorStack;
@@ -338,4 +340,44 @@ fn random_padding(bytes: &mut Vec<u8>) {
     let mut values: [u8; 20] = rng.gen();
     bytes.splice(0..0, values[0..n1].iter().cloned());
     bytes.append(&mut values[10..10 + n2].to_vec());
+}
+
+pub fn cbc_bitflipping_attack() -> Vec<u8> {
+    let dummy_data_block = "AAAAAAAAAAAAAAAA".to_string();
+    // Insert two blocks of user data. We manipulate the ciphertext of the first one
+    // to flip bits on the second one to get the desired output.
+    let mut ciphertext =
+        cbc_bitflipping_oracle(dummy_data_block.clone() + &dummy_data_block.clone());
+    let expected_output = "AAAAA;admin=true".as_bytes();
+
+    let mut manipulated_ciphertext;
+    manipulated_ciphertext = xor::fixed_xor(dummy_data_block.as_bytes(), expected_output);
+    manipulated_ciphertext = xor::fixed_xor(&ciphertext[32..48].to_vec(), &manipulated_ciphertext);
+    ciphertext.splice(32..48, manipulated_ciphertext);
+
+    ciphertext
+}
+
+pub fn is_bitflipped_ciphertext_admin(input: Vec<u8>) -> bool {
+    // Random but constant key and iv ( same as encrypt )
+    let key: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
+    let iv: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(4321).gen();
+
+    let input = cbc::decrypt(&input, &key, &iv).unwrap();
+    let input: String = input.iter().map(|v| v.clone() as char).collect();
+    input.contains(";admin=true;")
+}
+
+fn cbc_bitflipping_oracle(input: String) -> Vec<u8> {
+    // Random but constant key and iv
+    let key: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
+    let iv: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(4321).gen();
+
+    let input = input.replace("=", "%3D");
+    let input = input.replace(";", "%3B");
+    let prefix = "comment1=cooking%20MCs;userdata=";
+    let suffix = ";comment2=%20like%20a%20pound%20of%20bacon";
+    let output = prefix.to_owned() + &input + suffix;
+
+    cbc::encrypt(output.as_bytes(), &key, &iv).unwrap()
 }
