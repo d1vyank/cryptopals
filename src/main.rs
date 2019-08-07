@@ -124,7 +124,7 @@ fn test_pkcs7() {
     encoding::pkcs7_encode(&mut test, 20);
     assert_eq!("YELLOW SUBMARINE\x04\x04\x04\x04".as_bytes().to_vec(), test);
 
-    encoding::pkcs7_decode(&mut test, 20);
+    test = encoding::pkcs7_decode(&test, 20).unwrap();
     assert_eq!("YELLOW SUBMARINE".to_string().into_bytes(), test);
 
     encoding::pkcs7_encode(&mut test, 16);
@@ -134,9 +134,8 @@ fn test_pkcs7() {
             .to_vec(),
         test
     );
-    println!("h {:?}", test);
 
-    encoding::pkcs7_decode(&mut test, 16);
+    test = encoding::pkcs7_decode(&test, 16).unwrap();
     assert_eq!("YELLOW SUBMARINE".to_string().into_bytes(), test);
 }
 
@@ -224,29 +223,65 @@ fn test_break_aes_ecb_padded() {
 // Set 2 Challenge 15
 #[test]
 fn test_valid_pkcs7() {
-    let result = std::panic::catch_unwind(|| {
-        encoding::pkcs7_decode(
-            &mut "ICE ICE BABY\x05\x05\x05\x05".to_string().into_bytes(),
-            16,
-        )
-    });
+    let result = encoding::pkcs7_decode(
+        &mut "ICE ICE BABY\x05\x05\x05\x05".to_string().into_bytes(),
+        16,
+    );
+    assert_eq!(result.unwrap_err(), encoding::PKCS7DecodeError);
 
-    assert!(result.is_err());
-
-    let result = std::panic::catch_unwind(|| {
-        encoding::pkcs7_decode(
-            &mut "ICE ICE BABY\x01\x02\x03\x04".to_string().into_bytes(),
-            16,
-        )
-    });
-
-    assert!(result.is_err());
+    let result = encoding::pkcs7_decode(
+        &mut "ICE ICE BABY\x01\x02\x03\x04".to_string().into_bytes(),
+        16,
+    );
+    assert_eq!(result.unwrap_err(), encoding::PKCS7DecodeError);
 }
 
 // Set 2 Challenge 16
+
 #[test]
 fn test_cbc_bitflipping() {
     assert!(aes128::is_bitflipped_ciphertext_admin(
         aes128::cbc_bitflipping_attack()
     ));
+}
+
+// Set 3 Challenge 17
+#[test]
+fn test_cbc_oracle_padding() {
+    let decrypted_strings = fs::read_to_string("./test_input/set3_challenge17.txt").unwrap();
+
+    let plaintext = aes128::cbc_padding_oracle_attack::execute();
+    assert!(decrypted_strings.contains(&plaintext));
+}
+
+// Set 3 Challenge 18
+#[test]
+fn test_ctr_encryption() {
+    let key = b"YELLOW SUBMARINE";
+    let nonce = 0;
+
+    let plaintext = "testing a very very very loooooooooong string";
+    let ciphertext = aes128::ctr::encrypt(plaintext.as_bytes(), key, nonce).unwrap();
+    let decrypted = aes128::ctr::decrypt(&ciphertext, key, nonce).unwrap();
+    assert_eq!(
+        plaintext,
+        decrypted
+            .iter()
+            .map(|v| v.clone() as char)
+            .collect::<String>()
+    );
+
+    let plaintext_bytes = aes128::ctr::decrypt(
+        &base64::decode("L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==")
+            .unwrap(),
+        key,
+        nonce,
+    )
+    .unwrap();
+
+    let plaintext: String = plaintext_bytes.iter().map(|v| v.clone() as char).collect();
+    assert_eq!(
+        "Yo, VIP Let\'s kick it Ice, Ice, baby Ice, Ice, baby ".to_string(),
+        plaintext
+    );
 }

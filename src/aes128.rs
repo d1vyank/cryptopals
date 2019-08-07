@@ -62,6 +62,7 @@ pub mod cbc {
     use crate::encoding;
     use crate::xor;
     use openssl::error::ErrorStack;
+    use openssl::symm;
 
     const BLOCK_SIZE: usize = 16;
 
@@ -69,9 +70,8 @@ pub mod cbc {
         assert_eq!(iv.len(), BLOCK_SIZE, "IV length must equal block size");
 
         let mut bytes = bytes.to_vec();
-        if bytes.len() % 16 != 0 {
-            encoding::pkcs7_encode(&mut bytes, BLOCK_SIZE);
-        }
+        encoding::pkcs7_encode(&mut bytes, BLOCK_SIZE);
+
 
         let mut out = vec![];
         let mut prev_block = iv.to_vec();
@@ -105,11 +105,86 @@ pub mod cbc {
             out.append(&mut plaintext);
         }
 
-        encoding::pkcs7_decode(&mut out, BLOCK_SIZE);
+        out = encoding::pkcs7_decode(&out, BLOCK_SIZE).unwrap();
 
         Ok(out)
     }
 
+    pub fn decrypt_pad(
+        bytes: &[u8],
+        key: &[u8],
+        iv: &[u8],
+        pad: bool,
+    ) -> Result<Vec<u8>, ErrorStack> {
+        let mut out = vec![0; bytes.len() + 16];
+        let mut decrypter = symm::Crypter::new(
+            symm::Cipher::aes_128_cbc(),
+            symm::Mode::Decrypt,
+            key,
+            Some(iv),
+        )?;
+
+        decrypter.pad(pad);
+        decrypter.update(bytes, &mut out)?;
+
+        Ok(out[0..bytes.len()].to_vec())
+    }
+
+    pub fn encrypt_pad(
+        bytes: &[u8],
+        key: &[u8],
+        iv: &[u8],
+        pad: bool,
+    ) -> Result<Vec<u8>, ErrorStack> {
+        let mut out = vec![0; bytes.len() + 16];
+        let mut encrypter = symm::Crypter::new(
+            symm::Cipher::aes_128_cbc(),
+            symm::Mode::Encrypt,
+            key,
+            Some(iv),
+        )?;
+
+        encrypter.pad(pad);
+        encrypter.update(bytes, &mut out)?;
+
+        Ok(out[0..bytes.len()].to_vec())
+    }
+}
+
+pub mod ctr {
+    use super::ecb;
+    use crate::xor;
+    use openssl::error::ErrorStack;
+
+    pub fn encrypt(bytes: &[u8], key: &[u8], nonce: u64) -> Result<Vec<u8>, ErrorStack> {
+        let block_size = 16;
+        let mut ctr: u64 = 0;
+        let mut ciphertext = vec![];
+
+        // take block sized (or smaller) chunks of plaintext and xor with encrypted counter
+        for (i, _) in bytes.iter().enumerate().step_by(block_size) {
+            let block = [&nonce.to_le_bytes()[..], &ctr.to_le_bytes()[..]].concat();
+            let encrypted_ctr = ecb::encrypt(&block, key)?;
+            let mut end_index = i + block_size;
+            if end_index >= bytes.len() {
+                end_index = bytes.len();
+            }
+
+            let plaintext_block = &bytes[i..end_index];
+
+            ciphertext.append(&mut xor::fixed_xor(
+                plaintext_block,
+                &encrypted_ctr[..plaintext_block.len()],
+            ));
+            ctr += 1;
+        }
+
+        Ok(ciphertext)
+    }
+
+    pub fn decrypt(bytes: &[u8], key: &[u8], nonce: u64) -> Result<Vec<u8>, ErrorStack> {
+        encrypt(bytes, key, nonce)
+    }
 }
 
 pub fn encryption_oracle(bytes: &[u8]) -> Result<Vec<u8>, ErrorStack> {
@@ -375,9 +450,102 @@ fn cbc_bitflipping_oracle(input: String) -> Vec<u8> {
 
     let input = input.replace("=", "%3D");
     let input = input.replace(";", "%3B");
+
     let prefix = "comment1=cooking%20MCs;userdata=";
     let suffix = ";comment2=%20like%20a%20pound%20of%20bacon";
     let output = prefix.to_owned() + &input + suffix;
 
     cbc::encrypt(output.as_bytes(), &key, &iv).unwrap()
+}
+
+pub mod cbc_padding_oracle_attack {
+
+    use crate::encoding;
+
+    use rand::Rng;
+    use rand::SeedableRng;
+    use std::fs;
+
+    pub fn execute() -> String {
+        let (mut ciphertext, iv) = oracle();
+        let ciphertext_len = ciphertext.len();
+        let num_blocks = ciphertext_len / 16;
+
+        let mut plaintext = vec![];
+        let mut decrypted_block = vec![];
+        let mut intermediate = vec![];
+
+        // prepend IV to ciphertext (this is used to decrypt the first block)
+        ciphertext.splice(0..0, iv.to_vec().iter().cloned());
+
+        // For each block (starting from the second last, going backwards)
+        for blk in (1..=num_blocks).rev() {
+            // for each byte
+            for target_byte in (0..16).rev() {
+                // pick current and next block
+                let mut manipulated_block = vec![0; 16];
+                let target_block = ciphertext[(blk * 16)..(blk * 16) + 16].to_vec();
+                // The target valid padding we're trying to produce.
+                // e.g. 0x01 for byte 15, 0x02 for byte 14 .. 0x10 (16) for byte 0
+                let target_padding = (16 - target_byte) as u8;
+                // brute force all possible values for current byte
+                for guess in 0b00000000..=0b11111111 {
+                    manipulated_block[target_byte] = guess;
+                    // set each preceding byte
+                    for i in 0..intermediate.len() {
+                        manipulated_block[15 - i] = intermediate[i] ^ target_padding;
+                    }
+
+
+                    let input = [&manipulated_block[..], &target_block[..]].concat();
+                    if validate(input) {
+                        decrypted_block.push(
+                            guess ^ target_padding ^ ciphertext[(blk * 16) - (16 - target_byte)],
+                        );
+                        intermediate.push(guess ^ target_padding);
+                        break;
+                    }
+
+                }
+            }
+            plaintext.splice(0..0, decrypted_block.iter().rev().cloned());
+            decrypted_block = vec![];
+            intermediate = vec![];
+        }
+
+        let plaintext = encoding::pkcs7_decode(&plaintext, 16).unwrap();
+
+        plaintext.iter().map(|v| v.clone() as char).collect()
+    }
+
+    fn oracle() -> (Vec<u8>, [u8; 16]) {
+        let key: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
+        let iv: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(4321).gen();
+
+        let strings: Vec<String> = fs::read_to_string("./test_input/set3_challenge17.txt")
+            .unwrap()
+            .lines()
+            .map(|s| s.to_string())
+            .collect();
+
+        let chosen_string = &strings[rand::thread_rng().gen_range(0, 9)];
+
+        (
+            super::cbc::encrypt(chosen_string.as_bytes(), &key, &iv).unwrap(),
+            iv,
+        )
+    }
+
+    fn validate(bytes: Vec<u8>) -> bool {
+        let key: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
+        let iv: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(4321).gen();
+
+        let mut decrypted_bytes = super::cbc::decrypt_pad(&bytes, &key, &iv, false).unwrap();
+        let result = encoding::pkcs7_decode(&mut decrypted_bytes, 16);
+        if result.is_err() {
+            return false;
+        }
+
+        true
+    }
 }
