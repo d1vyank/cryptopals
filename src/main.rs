@@ -73,10 +73,14 @@ I go crazy when I hear a cymbal"
 #[test]
 fn test_break_repeating_xor_key() {
     assert_eq!(
-        Ok("Terminator X: Bring the noise".to_string()),
+        "Terminator X: Bring the noise".to_string(),
         vigenere::break_repeating_key_xor(
             fs::read_to_string("./test_input/set1challenge6.txt").unwrap()
         )
+        .unwrap()
+        .iter()
+        .map(|v| v.clone() as char)
+        .collect::<String>()
     );
 }
 
@@ -283,5 +287,37 @@ fn test_ctr_encryption() {
     assert_eq!(
         "Yo, VIP Let\'s kick it Ice, Ice, baby Ice, Ice, baby ".to_string(),
         plaintext
+    );
+}
+
+// Set 3 Challenge 20
+#[test]
+fn test_break_fixed_nonce_ctr() {
+    let contents = std::fs::read_to_string("./test_input/set3_challenge20.txt").unwrap();
+    let mut ciphertexts = vec![];
+    let mut plaintexts = vec![];
+    for line in contents.lines() {
+        ciphertexts.push(aes128::ctr::encrypt_fixed_nonce_key(
+            &base64::decode(line).unwrap(),
+        ));
+    }
+    let keystream = aes128::attack_fixed_nonce_ctr_ciphertexts(ciphertexts.clone());
+
+    for ciphertext in ciphertexts.iter() {
+        let plaintext: String = ciphertext
+            .iter()
+            .zip(keystream.iter().cycle())
+            .map(|(x, y)| (x ^ y) as char)
+            .collect();
+        plaintexts.push(plaintext);
+    }
+
+    assert_eq!(
+        "I\'m rated \"R\"...this is a warning, ya better void / Poets are paranoid, DJ\'s D-stroyedCuz I came back to attack others in spite- / Strike like lightnin\', It\'s quite frightenin\'!But don\'t be afraid in the dark, in a park / Not a scream or a cry, or a bark, more like a spark;Ya tremble like a alcoholic, muscles tighten up / What\'s that, lighten up! You see a sight butSuddenly you feel like your in a horror flick / You grab your heart then wish for tomorrow quick!Music\'s the clue, when I come your warned / Apocalypse Now, when I\'m done, ya gone!Haven\'t you ever heard of a MC-murderer? / This is the death penalty,and I\'m servin\' aDeath wish, so come on, step to this / Hysterical idea for a lyrical professionist!Friday the thirteenth, walking down Elm Street / You come in my realm ya get beat!This is off limits, so your visions are blurry / All ya see is the meters at a volumeTerror in the styles, never error-files / Indeed I\'m known-your exiled!For those that oppose to be level or next to this / I ain\'t a devil and this ain\'t the Exorcist!Worse than a nightmare, you don\'t have to sleep a wink / The pain\'s a migraine every time ya thinkFlashbacks interfere, ya start to hear: / The R-A-K-I-M in your ear;Then the beat is hysterical / That makes Eric go get a ax and chops the wackSoon the lyrical format is superior / Faces of death remainMC\'s decaying, cuz they never stayed / The scene of a crime every night at the showThe fiend of a rhyme on the mic that you know / It\'s only one capable, breaks-the unbreakableMelodies-unmakable, pattern-unescapable / A horn if want the style I possesI bless the child, the earth, the gods and bomb the rest / For those that envy a MC it can beHazardous to your health so be friendly / A matter of life and death, just like a etch-a-sketchShake \'till your clear, make it disappear, make the next / After the ceremony, let the rhyme rest in eeactIf not, my soul\'ll release! / The scene is recreated, reincarnated, updated, I\'m glad you made itCuz your about to see a disastrous sight / A performance never again performed on a mic:Lyrics of fury! A fearified freestyle! / The \"R\" is in the house-too much tension!Make sure the system\'s loud when I mention / Phrases that\'s fearsomeYou want to hear some sounds that not only pounds but please your eardrums; / I sit back and observe ahe fhoa  >innh  Then nonchalantly tell you what it mean to me / Strictly business I\'m quickly in this moodAnd I don\'t care if the whole crowd\'s a witness! / I\'m a tear you apart but I\'m a spare you a heartProgram into the speed of the rhyme, prepare to start / Rhythm\'s out of the radius, insane as the craoieseMusical madness MC ever made, see it\'s / Now an emergency, open-heart surgeryOpen your mind, you will find every word\'ll be / Furier than ever, I remain the furtureBattle\'s tempting...whatever suits ya! / For words the sentence, there\'s no resemblanceYou think you\'re ruffer, then suffer the consequences! / I\'m never dying-terrifying resultsI wake ya with hundreds of thousands of volts / Mic-to-mouth resuscitation, rhythm with radiationNovocain ease the pain it might save him / If not, Eric B.\'s the judge, the crowd\'s the juryYo Rakim, what\'s up? / Yo, I\'m doing the knowledge, E., man I\'m trying to get paid in fullWell, check this out, since Norby Walters is our agency, right? / TrueKara Lewis is our agent, word up / Zakia and 4th and Broadway is our record company, indeedOkay, so who we rollin\' with then? We rollin\' with Rush / Of Rushtown ManagementCheck this out, since we talking over / This def beat right here that I put togetherI wanna hear some of them def rhymes, you know what I\'m sayin\'? / And together, we can get paid in fuylThinkin\' of a master plan / \'Cuz ain\'t nuthin\' but sweat inside my handSo I dig into my pocket, all my money is spent / So I dig deeper but still comin\' up with lintSo I start my mission, leave my residence / Thinkin\' how could I get some dead presidentsI need money, I used to be a stick-up kid / So I think of all the devious things I didI used to roll up, this is a hold up, ain\'t nuthin\' funny / Stop smiling, be still, don\'t nuthin\' movp bue te   eeetBut now I learned to earn \'cuz I\'m righteous / I feel great, so maybe I might justSearch for a nine to five, if I strive / Then maybe I\'ll stay aliveSo I walk up the street whistlin\' this / Feelin\' out of place \'cuz, man, do I missA pen and a paper, a stereo, a tape of / Me and Eric B, and a nice big plate ofFish, which is my favorite dish / But without no money it\'s still a wish\'Cuz I don\'t like to dream about gettin\' paid / So I dig into the books of the rhymes that I madeSo now to test to see if I got pull / Hit the studio, \'cuz I\'m paid in fullRakim, check this out, yo / You go to your girl house and I\'ll go to mine\'Cause my girl is definitely mad / \'Cause it took us too long to do this albumYo, I hear what you\'re saying / So let\'s just pump the music upAnd count our money / Yo, well check this out, yo EliTurn down the bass down / And let the beat just keep on rockin\'And we outta here / Yo, what happened to peace? / Peace".to_string(),
+        plaintexts
+            .iter()
+            .map(|s| s.chars())
+            .flatten()
+            .collect::<String>()
     );
 }

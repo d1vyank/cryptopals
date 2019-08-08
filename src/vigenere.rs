@@ -1,6 +1,7 @@
-use std::collections::hash_map::HashMap;
 use crate::xor;
+use crate::score;
 
+use std::collections::hash_map::HashMap;
 pub fn repeating_key_xor(input: String) -> String {
     let bytes = input.into_bytes();
     let mut output = vec![];
@@ -19,7 +20,7 @@ pub fn repeating_key_xor(input: String) -> String {
     hex::encode(&output)
 }
 
-pub fn break_repeating_key_xor(input: String) -> Result<String, base64::DecodeError> {
+pub fn break_repeating_key_xor(input: String) -> Result<Vec<u8>, base64::DecodeError> {
     let key_size_guess_range = 2..=40;
     let bytes = base64::decode(&input.lines().collect::<String>())?;
     let mut distance_min = u32::max_value();
@@ -44,36 +45,39 @@ pub fn break_repeating_key_xor(input: String) -> Result<String, base64::DecodeEr
         }
     }
 
-    let mut possible_keys: Vec<HashMap<char, u32>> = vec![HashMap::new(); probable_key_size];
+    Ok(break_repeating_key_xor_with_key_size(bytes, probable_key_size))
+}
+
+pub fn break_repeating_key_xor_with_key_size(
+    bytes: Vec<u8>,
+    key_size: usize,
+) -> Vec<u8> {
+    let mut possible_keys: Vec<HashMap<u8, u32>> = vec![HashMap::new(); key_size];
     for (i, byte) in bytes.iter().enumerate() {
 
         let mut guesses = xor::decrypt_single_byte_xor(vec![byte.clone()]);
-        xor::score_decrypted_strings(&mut guesses);
+        xor::score_decrypted_strings(&mut guesses, score::english_score);
         let best_guess = match guesses.last() {
             Some(v) => v,
             None => continue,
         };
-        let best_key_guess = best_guess.key as char;
-        match possible_keys[i % probable_key_size].get_mut(&best_key_guess) {
+        let best_key_guess = best_guess.key;
+        match possible_keys[i % key_size].get_mut(&best_key_guess) {
             Some(value) => *value += 1,
             None => {
-                let _ = possible_keys[i % probable_key_size].insert(best_key_guess, 1);
+                let _ = possible_keys[i % key_size].insert(best_key_guess, 1);
             }
         };
     }
 
     let mut key = vec![];
-
     for k in possible_keys.iter() {
-        let mut temp: Vec<(&char, &u32)> = k.iter().collect();
+        let mut temp: Vec<(&u8, &u32)> = k.iter().collect();
         temp.sort_by(|a, b| b.1.cmp(a.1));
-
-        key.push(temp[0].0);
+        key.push(temp[0].0.clone());
     }
 
-    let key: String = key.iter().cloned().collect();
-
-    Ok(key)
+    key
 }
 
 fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {

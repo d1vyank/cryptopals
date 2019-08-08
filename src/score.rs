@@ -7,6 +7,17 @@ pub fn english_score(s: &String) -> u32 {
     score
 }
 
+pub fn uppercase_score(s: &String) -> u32 {
+    let mut score = 0;
+    for c in s.chars() {
+        if c.is_uppercase() {
+            score += 1;
+        }
+    }
+
+    score
+}
+
 pub fn english_char_set() -> Vec<char> {
     "abcdefghijklmnopqrstuvwxyz \'\"!@#$%^&*()-_=+:;{}[]\\|,<>./?~ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890\n"
     .chars().collect()

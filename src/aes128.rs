@@ -155,6 +155,7 @@ pub mod ctr {
     use super::ecb;
     use crate::xor;
     use openssl::error::ErrorStack;
+    use rand::{Rng, SeedableRng};
 
     pub fn encrypt(bytes: &[u8], key: &[u8], nonce: u64) -> Result<Vec<u8>, ErrorStack> {
         let block_size = 16;
@@ -184,6 +185,13 @@ pub mod ctr {
 
     pub fn decrypt(bytes: &[u8], key: &[u8], nonce: u64) -> Result<Vec<u8>, ErrorStack> {
         encrypt(bytes, key, nonce)
+    }
+
+    pub fn encrypt_fixed_nonce_key(bytes: &[u8]) -> Vec<u8> {
+        let nonce = 0;
+        let key: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
+
+        encrypt(bytes, &key, nonce).unwrap()
     }
 }
 
@@ -548,4 +556,32 @@ pub mod cbc_padding_oracle_attack {
 
         true
     }
+}
+
+pub fn attack_fixed_nonce_ctr_ciphertexts(ciphertexts: Vec<Vec<u8>>) -> Vec<u8> {
+    let max_len = ciphertexts.iter().max_by_key(|c| c.len()).unwrap().len();
+    let mut keystream = vec![];
+    // for each column
+    for i in 0..max_len {
+        let mut column = vec![];
+        // take the i'th byte of each ciphertext, if exists
+        for c in ciphertexts.iter() {
+            if c.len() <= i {
+                continue;
+            }
+            column.push(c[i]);
+        }
+        // Each column is encrypted with the same byte of the key stream
+        let mut guesses = xor::decrypt_single_byte_xor(column);
+        // For the first column, use is_uppercase charater as the scoring function
+        let mut heuristic: fn(&String) -> u32 = score::english_score;
+        if i == 0 {
+            heuristic = score::uppercase_score;
+        }
+
+        xor::score_decrypted_strings(&mut guesses, heuristic);
+        keystream.push(guesses.last().unwrap_or(&Default::default()).key.clone());
+    }
+
+    keystream
 }

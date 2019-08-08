@@ -2,7 +2,7 @@ use crate::score::english_score;
 use std::{fs, str};
 
 /// Represents a possible value of a brute forced on a single byte xor cipher
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct BruteForceGuess {
     pub output: String,
     pub key: u8,
@@ -25,7 +25,7 @@ pub fn fixed_xor(i1: &[u8], i2: &[u8]) -> Vec<u8> {
 pub fn decrypt_single_byte_xor_cipher(input: String) -> Result<String, hex::FromHexError> {
     let bytes = hex::decode(input)?;
     let mut guesses = decrypt_single_byte_xor(bytes);
-    score_decrypted_strings(&mut guesses);
+    score_decrypted_strings(&mut guesses, english_score);
 
     // return best guess
     Ok(guesses.last().unwrap_or(&Default::default()).output.clone())
@@ -75,10 +75,10 @@ pub fn decrypt_single_byte_xor(bytes: Vec<u8>) -> Vec<BruteForceGuess> {
     guesses
 }
 
-pub fn score_decrypted_strings(guesses: &mut Vec<BruteForceGuess>) {
+pub fn score_decrypted_strings(guesses: &mut Vec<BruteForceGuess>, heuristic: fn(&String) -> u32) {
     // Score by maximum occurences of alphabets and spaces
     for g in guesses.iter_mut() {
-        g.score = english_score(&g.output)
+        g.score = heuristic(&g.output)
     }
 
     guesses.sort_by_key(|g| g.score);
