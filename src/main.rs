@@ -1,10 +1,10 @@
 #![allow(dead_code, unused_imports)]
 
 use rand::Rng;
-use std::io::Write;
 use std::{fs, str};
 mod aes128;
 mod encoding;
+mod mt19937;
 mod query_string;
 mod score;
 mod vigenere;
@@ -320,4 +320,35 @@ fn test_break_fixed_nonce_ctr() {
             .flatten()
             .collect::<String>()
     );
+}
+
+// Set 3 Challenge 21
+#[test]
+fn mt19937_gen() {
+    let mut rng = mt19937::MersenneRng::new(12346);
+    let n1 = rng.extract_number();
+    let n2 = rng.extract_number();
+    let n3 = rng.extract_number();
+
+    assert_ne!(n1, n2);
+    assert_ne!(n1, n3);
+    assert_ne!(n2, n3);
+
+    let mut rng2 = mt19937::MersenneRng::new(12346);
+    let m1 = rng2.extract_number();
+    let m2 = rng2.extract_number();
+    let m3 = rng2.extract_number();
+
+
+    assert_eq!(n1, m1);
+    assert_eq!(n2, m2);
+    assert_eq!(n3, m3);
+}
+
+// Set 3 Challenge 22
+#[test]
+fn guess_mt19937_seed() {
+    let (first_random_number, seed) = mt19937::timestamp_seeded_rng_oracle();
+    let guessed_seed = mt19937::guess_unix_timestamp_seed(first_random_number);
+    assert_eq!(seed, guessed_seed);
 }
