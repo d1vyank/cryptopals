@@ -2,10 +2,12 @@
 // int[0..N-1] MTs
 // int index := N+1
 
+use crate::bits;
 
-use rand::{thread_rng, Rng};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use rand::rngs::SmallRng;
+use rand::{thread_rng, Rng, SeedableRng};
+use std::time::{Duration, SystemTime};
 const LOWER_MASK: u32 = (1 << R) - 1;
 const UPPER_MASK: u32 = !LOWER_MASK;
 
@@ -13,33 +15,33 @@ const W: u32 = 32;
 const N: usize = 624;
 const M: usize = 397;
 const R: u32 = 31;
-const A: u32 = 0x9908B0DF;
-const F: u32 = 1812433253;
-const U: u32 = 11;
-const D: u32 = 0xFFFFFFFF;
-const S: u32 = 7;
-const B: u32 = 0x9D2C5680;
-const T: u32 = 15;
-const C: u32 = 0xEFC60000;
-const L: u32 = 18;
 
 pub struct MersenneRng {
     index: usize,
     mt: Vec<u32>,
-
 }
 
 impl MersenneRng {
     // Initialize the generator from a seed
     pub fn new(seed: u32) -> Self {
-        println!("seeding with {:?}", seed);
-
         let mut mt = vec![seed];
         for i in 1..=(N - 1) {
-            let val: u64 = (F as u64) * (mt[i - 1] ^ (mt[i - 1] >> (W - 2))) as u64 + (i as u64);
+            let val: u64 =
+                (1812433253 as u64) * (mt[i - 1] ^ (mt[i - 1] >> (W - 2))) as u64 + (i as u64);
             mt.push(val as u32);
         }
         MersenneRng { index: N, mt: mt }
+    }
+
+    pub fn clone(samples: Vec<u32>) -> Self {
+        if samples.len() != N {
+            panic!("{:?} samples required to clone", N);
+        }
+
+        MersenneRng {
+            index: N,
+            mt: samples.iter().map(|n| untemper(*n)).collect(),
+        }
     }
 
     // Extract a tempered value based on MT[index]
@@ -49,18 +51,14 @@ impl MersenneRng {
             panic!("Generator was never seeded");
         }
         if self.index == N {
+
             self.twist();
         }
 
-        let mut y = self.mt[self.index];
-        y = y ^ ((y >> U) & D);
-        y = y ^ ((y << S) & B);
-        y = y ^ ((y << T) & C);
-        y = y ^ (y >> L);
-
+        let y = temper(self.mt[self.index]);
         self.index += 1;
 
-        return y;
+        y
     }
 
     // Generate the next N values from the series x_i
@@ -70,7 +68,7 @@ impl MersenneRng {
             let mut x_a = x >> 1;
             if (x % 2) != 0 {
                 // lowest bit of x is 1
-                x_a = x_a ^ A;
+                x_a = x_a ^ 0x9908B0DF;
             }
             self.mt[i] = self.mt[(i + M) % N] ^ x_a;
         }
@@ -78,19 +76,91 @@ impl MersenneRng {
     }
 }
 
-// Write a routine that performs the following operation:
-//
+pub fn mt_cipher_encrypt(key: u16, bytes: &[u8]) -> Vec<u8> {
+    let mut rng = MersenneRng::new(key as u32);
+    let mut keystream = vec![];
+    let mut out = vec![];
+    for byte in bytes.iter() {
+        if keystream.len() == 0 {
+            keystream = rng.extract_number().to_be_bytes().to_vec();
+        }
+        out.push(byte ^ keystream.pop().unwrap());
+    }
 
-// You get the idea. Go get coffee while it runs. Or just simulate the passage of time, although you're missing some of the fun of this exercise if you do that.
-//
-// From the 32 bit RNG output, discover the seed.
+    out
+}
+
+pub fn mt_cipher_decrypt(key: u16, bytes: &[u8]) -> Vec<u8> {
+    mt_cipher_encrypt(key, bytes)
+}
+
+pub fn break_mt_cipher() -> u16 {
+    let plaintext = "AAAAAAAAAAAAAA".as_bytes();
+    let ciphertext = mt_encryption_oracle(plaintext);
+
+    let padding_len = ciphertext.len() - plaintext.len();
+    let padding = vec![0; padding_len];
+    let input = [padding, plaintext.to_vec()].concat();
+
+    let range = std::u16::MIN..std::u16::MAX;
+    for key in range {
+        let guess = mt_cipher_encrypt(key, &input);
+        if guess[padding_len..] == ciphertext[padding_len..] {
+            return key;
+        }
+    }
+
+    panic!("key not found!")
+}
+
+pub fn mt_encryption_oracle(bytes: &[u8]) -> Vec<u8> {
+    let key = 43210;
+    let mut input = vec![];
+
+    // prefix random number of random bytes
+    for i in 0..SmallRng::seed_from_u64(123456).gen_range(0, 40) {
+        input.push(SmallRng::seed_from_u64(i as u64).gen());
+    }
+    input.append(&mut bytes.to_vec());
+
+    mt_cipher_encrypt(key, &input)
+}
+
+fn random_token() -> u32 {
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap().as_secs() as u32;
+
+    MersenneRng::new(now).extract_number()
+}
+
+pub fn detect_timestamp_seeded_token() -> bool {
+    guess_unix_timestamp_seed(random_token());
+    true
+}
+
+fn temper(y: u32) -> u32 {
+    let mut y = y ^ (y >> 11);
+    y ^= (y << 7) & 0x9D2C5680;
+    y ^= (y << 15) & 0xEFC60000;
+    y ^ (y >> 18)
+}
+
+fn untemper(y: u32) -> u32 {
+    let mut y = bits::invert_right_shift_xor(18, y);
+    y = bits::invert_left_shift_and_xor(15, y, 0xEFC60000);
+    y = bits::invert_left_shift_and_xor(7, y, 0x9D2C5680);
+    bits::invert_right_shift_xor(11, y)
+}
 
 // Wait a random number of seconds between 40 and 1000.
 // Seeds the RNG with the current Unix timestamp
 // Waits a random number of seconds again.
 // Returns the first 32 bit output of the RNG.
 pub fn timestamp_seeded_rng_oracle() -> (u32, u32) {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap();
     // simulate passage of time
     let r = rand::thread_rng().gen_range(80, 2000);
     let seed = now.checked_sub(Duration::from_secs(r)).unwrap().as_secs() as u32;
@@ -102,16 +172,26 @@ pub fn timestamp_seeded_rng_oracle() -> (u32, u32) {
 
 pub fn guess_unix_timestamp_seed(first_generated_number: u32) -> u32 {
     let seconds_in_week = 604800;
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap();
 
     for i in 0..seconds_in_week {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         let guess = now.checked_sub(Duration::from_secs(i)).unwrap().as_secs() as u32;
-        let mut rng = MersenneRng::new(guess);
-        let rn = rng.extract_number();
-        if rn == first_generated_number {
+        if MersenneRng::new(guess).extract_number() == first_generated_number {
             return guess;
         }
     }
 
     panic!("seed not found");
+}
+
+#[test]
+fn mt_stream_cipher() {
+    let key = 12345;
+    let plaintext = b"This is a test".to_vec();
+    assert_eq!(
+        plaintext,
+        mt_cipher_decrypt(key, &mt_cipher_encrypt(key, &plaintext))
+    );
 }

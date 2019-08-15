@@ -2,7 +2,9 @@
 
 use rand::Rng;
 use std::{fs, str};
+
 mod aes128;
+mod bits;
 mod encoding;
 mod mt19937;
 mod query_string;
@@ -16,7 +18,7 @@ fn main() {
 
 // Set 1 Challenge 1
 #[test]
-fn test_hex_to_base64() {
+fn hex_to_base64() {
     assert_eq!(encoding::hex_to_base64(
         "49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_string()
     ).unwrap(), "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t")
@@ -24,7 +26,7 @@ fn test_hex_to_base64() {
 
 // Set 1 Challenge 2
 #[test]
-fn test_fixed_xor() {
+fn fixed_xor() {
     assert_eq!(
         xor::fixed_xor_hex(
             "1c0111001f010100061a024b53535009181c".to_string(),
@@ -37,7 +39,7 @@ fn test_fixed_xor() {
 
 // Set 1 Challenge 3
 #[test]
-fn test_single_byte_xor_decryption() {
+fn single_byte_xor_decryption() {
     assert_eq!(
         "Cooking MC\'s like a pound of bacon".to_string(),
         xor::decrypt_single_byte_xor_cipher(
@@ -49,7 +51,7 @@ fn test_single_byte_xor_decryption() {
 
 // Set 1 Challenge 4
 #[test]
-fn test_single_byte_xor_decryption_from_file() {
+fn single_byte_xor_decryption_from_file() {
     assert_eq!(
         "Now that the party is jumping\n".to_string(),
         xor::find_single_byte_xor_encrypted_string().unwrap()
@@ -58,7 +60,7 @@ fn test_single_byte_xor_decryption_from_file() {
 
 // Set 1 Challenge 5
 #[test]
-fn test_repeating_key_xor() {
+fn repeating_key_xor() {
     assert_eq!(
         "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f",
         vigenere::repeating_key_xor(
@@ -71,7 +73,7 @@ I go crazy when I hear a cymbal"
 
 // Set 1 Challenge 6
 #[test]
-fn test_break_repeating_xor_key() {
+fn break_repeating_xor_key() {
     assert_eq!(
         "Terminator X: Bring the noise".to_string(),
         vigenere::break_repeating_key_xor(
@@ -86,7 +88,7 @@ fn test_break_repeating_xor_key() {
 
 // Set 1 Challenge 7
 #[test]
-fn test_aes_128_ecb_decrypt() {
+fn aes_128_ecb_decrypt() {
     let plaintext = "I\'m back and I\'m ringin\' the bell \nA rockin\' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that\'s my DJ Deshay cuttin\' all them Z\'s \nHittin\' hard and the girlies goin\' crazy \nVanilla\'s on the mike, man I\'m not lazy. \n\nI\'m lettin\' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse\'s to the side yellin\', Go Vanilla Go! \n\nSmooth \'cause that\'s the way I will be \nAnd if you don\'t give a damn, then \nWhy you starin\' at me \nSo get off \'cause I control the stage \nThere\'s no dissin\' allowed \nI\'m in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n\' play \n\nStage 2 -- Yea the one ya\' wanna listen to \nIt\'s off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI\'m an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI\'m like Samson -- Samson to Delilah \nThere\'s no denyin\', You can try to hang \nBut you\'ll keep tryin\' to get my style \nOver and over, practice makes perfect \nBut not if you\'re a loafer. \n\nYou\'ll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I\'m comin\' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin\' \nVanilla Ice is sellin\' and you people are buyin\' \n\'Cause why the freaks are jockin\' like Crazy Glue \nMovin\' and groovin\' trying to sing along \nAll through the ghetto groovin\' this here song \nNow you\'re amazed by the VIP posse. \n\nSteppin\' so hard like a German Nazi \nStartled by the bases hittin\' ground \nThere\'s no trippin\' on mine, I\'m just gettin\' down \nSparkamatic, I\'m hangin\' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n\'89 in my time! You, \'90 is my year. \n\nYou\'re weakenin\' fast, YO! and I can tell it \nYour body\'s gettin\' hot, so, so I can smell it \nSo don\'t be mad and don\'t be sad \n\'Cause the lyrics belong to ICE, You can call me Dad \nYou\'re pitchin\' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don\'t be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you\'re dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
 
     let key = "YELLOW SUBMARINE".as_bytes();
@@ -109,7 +111,7 @@ fn test_aes_128_ecb_decrypt() {
 
 // Set 1 Challenge 8
 #[test]
-fn test_detect_aes() {
+fn detect_aes() {
     let content = fs::read_to_string("./test_input/set1challenge8.txt").unwrap();
 
     for (i, line) in content.lines().enumerate() {
@@ -123,7 +125,7 @@ fn test_detect_aes() {
 
 // Set 2 Challenge 9
 #[test]
-fn test_pkcs7() {
+fn pkcs7() {
     let mut test = "YELLOW SUBMARINE".to_string().into_bytes();
     encoding::pkcs7_encode(&mut test, 20);
     assert_eq!("YELLOW SUBMARINE\x04\x04\x04\x04".as_bytes().to_vec(), test);
@@ -145,7 +147,7 @@ fn test_pkcs7() {
 
 // Set 2 Challenge 10
 #[test]
-fn test_aes_cbc() {
+fn aes_cbc() {
     let plaintext = "I\'m back and I\'m ringin\' the bell \nA rockin\' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that\'s my DJ Deshay cuttin\' all them Z\'s \nHittin\' hard and the girlies goin\' crazy \nVanilla\'s on the mike, man I\'m not lazy. \n\nI\'m lettin\' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse\'s to the side yellin\', Go Vanilla Go! \n\nSmooth \'cause that\'s the way I will be \nAnd if you don\'t give a damn, then \nWhy you starin\' at me \nSo get off \'cause I control the stage \nThere\'s no dissin\' allowed \nI\'m in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n\' play \n\nStage 2 -- Yea the one ya\' wanna listen to \nIt\'s off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI\'m an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI\'m like Samson -- Samson to Delilah \nThere\'s no denyin\', You can try to hang \nBut you\'ll keep tryin\' to get my style \nOver and over, practice makes perfect \nBut not if you\'re a loafer. \n\nYou\'ll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I\'m comin\' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin\' \nVanilla Ice is sellin\' and you people are buyin\' \n\'Cause why the freaks are jockin\' like Crazy Glue \nMovin\' and groovin\' trying to sing along \nAll through the ghetto groovin\' this here song \nNow you\'re amazed by the VIP posse. \n\nSteppin\' so hard like a German Nazi \nStartled by the bases hittin\' ground \nThere\'s no trippin\' on mine, I\'m just gettin\' down \nSparkamatic, I\'m hangin\' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n\'89 in my time! You, \'90 is my year. \n\nYou\'re weakenin\' fast, YO! and I can tell it \nYour body\'s gettin\' hot, so, so I can smell it \nSo don\'t be mad and don\'t be sad \n\'Cause the lyrics belong to ICE, You can call me Dad \nYou\'re pitchin\' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don\'t be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you\'re dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
     let key = b"YELLOW SUBMARINE";
     let iv: [u8; 16] = [0; 16];
@@ -167,7 +169,7 @@ fn test_aes_cbc() {
 
 // Set 2 Challenge 11
 #[test]
-fn test_ecb_detection() {
+fn ecb_detection() {
     let mut ecb_count = 0;
     let repeating_key = b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -186,7 +188,7 @@ fn test_ecb_detection() {
 
 // Set 2 Challenge 12
 #[test]
-fn test_break_aes_ecb() {
+fn break_aes_ecb() {
     assert_eq!("Rollin\' in my 5.0\nWith my rag-top down so my hair can blow\nThe girlies on standby waving just to say hi\nDid you stop? No, I just drove by\n",
     aes128::decrypt_aes_ecb_byte_at_a_time());
 }
@@ -194,7 +196,7 @@ fn test_break_aes_ecb() {
 
 // Set 2 Challenge 13
 #[test]
-fn test_ecb_cut_paste() {
+fn ecb_cut_paste() {
     let result = query_string::parse("foo=bar&baz=qux&zap=zazzle".to_string());
     assert_eq!(result.get("foo").unwrap(), "bar");
     assert_eq!(result.get("baz").unwrap(), "qux");
@@ -219,14 +221,14 @@ fn test_ecb_cut_paste() {
 
 // Set 2 Challenge 14
 #[test]
-fn test_break_aes_ecb_padded() {
+fn break_aes_ecb_padded() {
     assert_eq!("Rollin\' in my 5.0\nWith my rag-top down so my hair can blow\nThe girlies on standby waving just to say hi\nDid you stop? No, I just drove by\n",
     aes128::decrypt_aes_ecb_padded_byte_at_a_time());
 }
 
 // Set 2 Challenge 15
 #[test]
-fn test_valid_pkcs7() {
+fn valid_pkcs7() {
     let result = encoding::pkcs7_decode(
         &mut "ICE ICE BABY\x05\x05\x05\x05".to_string().into_bytes(),
         16,
@@ -243,7 +245,7 @@ fn test_valid_pkcs7() {
 // Set 2 Challenge 16
 
 #[test]
-fn test_cbc_bitflipping() {
+fn cbc_bitflipping() {
     assert!(aes128::is_bitflipped_ciphertext_admin(
         aes128::cbc_bitflipping_attack()
     ));
@@ -251,7 +253,7 @@ fn test_cbc_bitflipping() {
 
 // Set 3 Challenge 17
 #[test]
-fn test_cbc_oracle_padding() {
+fn cbc_oracle_padding() {
     let decrypted_strings = fs::read_to_string("./test_input/set3_challenge17.txt").unwrap();
 
     let plaintext = aes128::cbc_padding_oracle_attack::execute();
@@ -260,7 +262,7 @@ fn test_cbc_oracle_padding() {
 
 // Set 3 Challenge 18
 #[test]
-fn test_ctr_encryption() {
+fn ctr_encryption() {
     let key = b"YELLOW SUBMARINE";
     let nonce = 0;
 
@@ -292,7 +294,7 @@ fn test_ctr_encryption() {
 
 // Set 3 Challenge 20
 #[test]
-fn test_break_fixed_nonce_ctr() {
+fn break_fixed_nonce_ctr() {
     let contents = std::fs::read_to_string("./test_input/set3_challenge20.txt").unwrap();
     let mut ciphertexts = vec![];
     let mut plaintexts = vec![];
@@ -351,4 +353,33 @@ fn guess_mt19937_seed() {
     let (first_random_number, seed) = mt19937::timestamp_seeded_rng_oracle();
     let guessed_seed = mt19937::guess_unix_timestamp_seed(first_random_number);
     assert_eq!(seed, guessed_seed);
+}
+
+// Set 3 Challenge 23
+#[test]
+fn clone_mt19937() {
+    let mut rng = mt19937::MersenneRng::new(123456);
+    let mut samples = vec![];
+
+    // collect N=624 samples
+    for _ in 0..624 {
+        samples.push(rng.extract_number());
+    }
+
+    let mut rng_clone = mt19937::MersenneRng::clone(samples);
+
+    // assert clone produces same values as original
+    for _ in 0..1000 {
+        assert_eq!(rng.extract_number(), rng_clone.extract_number());
+    }
+}
+
+// Set 3 Challenge 24
+// skip slow brute force test
+//#[test]
+fn break_mt19937_cipher() {
+    let key = 43210;
+    assert_eq!(key, mt19937::break_mt_cipher());
+
+    assert!(mt19937::detect_timestamp_seeded_token());
 }
