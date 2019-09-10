@@ -1,20 +1,19 @@
 pub fn invert_right_shift_xor(n: usize, y: u32) -> u32 {
     let mut out = u32_to_bool_vec(y);
+
     for i in n..32 {
-        // xor the i'th bit with the i-1'th bit
         out[i] ^= out[i - n];
     }
+
     bool_vec_to_u32(out)
 }
 
 pub fn invert_left_shift_and_xor(n: usize, y: u32, c: u32) -> u32 {
     let mut out = u32_to_bool_vec(y);
-    let c_vec = u32_to_bool_vec(c);
+    let c = u32_to_bool_vec(c);
 
-    // the last 'n' bits are already set as AND and XOR with the 0s produced by left shifting
-    // does not have any effect
     for i in (0..(32 - n)).rev() {
-        out[i] ^= out[i + n] & c_vec[i];
+        out[i] ^= out[i + n] & c[i];
     }
 
     bool_vec_to_u32(out)
@@ -25,19 +24,20 @@ fn u32_to_bool_vec(x: u32) -> Vec<bool> {
     for i in (0..32).rev() {
         y.push(is_bit_set(x, i));
     }
-    y
 
+    y
 }
 
 fn bool_vec_to_u32(y: Vec<bool>) -> u32 {
     let mut x = 0;
-    for i in 0..32 {
-        if y[i] {
-            //set bit 31-i
-            x |= 1 << (31 - i);
+    for i in (0..32).rev() {
+        if y[31 - i] {
+            //set bit i
+            x |= 1 << (i);
+
         } else {
-            //unset bit  31-i
-            x &= !(1 << (31 - i));
+            //unset bit i
+            x &= !(1 << (i));
         }
     }
     x
@@ -47,6 +47,7 @@ fn is_bit_set(input: u32, n: u8) -> bool {
     if n >= 32 {
         panic!("n cannot be > 32");
     }
+
     input & (1 << n) != 0
 }
 
@@ -60,6 +61,10 @@ fn u32_bools_conversion() {
 fn bools_to_u32() {
     let v = vec![true; 32];
     assert_eq!(bool_vec_to_u32(v), std::u32::MAX);
+
+    let mut v = vec![false; 32];
+    v[0] = true;
+    assert_eq!(bool_vec_to_u32(v), 2147483648);
 }
 
 #[test]

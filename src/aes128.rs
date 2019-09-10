@@ -72,7 +72,6 @@ pub mod cbc {
         let mut bytes = bytes.to_vec();
         encoding::pkcs7_encode(&mut bytes, BLOCK_SIZE);
 
-
         let mut out = vec![];
         let mut prev_block = iv.to_vec();
 
@@ -104,7 +103,6 @@ pub mod cbc {
             prev_block = bytes[i..i + BLOCK_SIZE].to_vec().clone();
             out.append(&mut plaintext);
         }
-
         out = encoding::pkcs7_decode(&out, BLOCK_SIZE).unwrap();
 
         Ok(out)
@@ -193,6 +191,28 @@ pub mod ctr {
 
         encrypt(bytes, &key, nonce).unwrap()
     }
+
+    // allows you to "seek" into the ciphertext, decrypt, and re-encrypt with different plaintext
+    pub fn edit(
+        ciphertext: &[u8],
+        key: &[u8],
+        nonce: u64,
+        offset: usize,
+        newtext: &[u8],
+    ) -> Result<Vec<u8>, ErrorStack> {
+        if offset >= ciphertext.len() {
+            return Ok(ciphertext.to_vec());
+        }
+        let padding = vec![0; offset];
+        let input = [padding, newtext.to_vec()].concat();
+        // join original ciphertext and edited ciphertext
+        let output = [
+            ciphertext[0..offset].to_vec(),
+            encrypt(&input, key, nonce)?[offset..].to_vec(),
+        ]
+        .concat();
+        Ok(output)
+    }
 }
 
 pub fn encryption_oracle(bytes: &[u8]) -> Result<Vec<u8>, ErrorStack> {
@@ -229,13 +249,11 @@ pub fn decrypt_aes_ecb_padded_byte_at_a_time() -> String {
     let block_size = 16;
     let padding_size = detect_padding_size(block_size);
 
-
     decrypt_aes_ecb(&ecb_encryption_oracle_padded, block_size, padding_size)
 }
 
-
 fn decrypt_aes_ecb(
-    oracle: &Fn(&[u8]) -> Vec<u8>,
+    oracle: &dyn Fn(&[u8]) -> Vec<u8>,
     block_size: usize,
     padding_size: usize,
 ) -> String {
@@ -316,7 +334,6 @@ fn decrypt_aes_ecb(
         plaintext.push_str(&curr_decrypted_block);
         curr_decrypted_block = Default::default();
     }
-
 
     plaintext
 }
@@ -447,8 +464,7 @@ pub fn is_bitflipped_ciphertext_admin(input: Vec<u8>) -> bool {
     let iv: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(4321).gen();
 
     let input = cbc::decrypt(&input, &key, &iv).unwrap();
-    let input: String = input.iter().map(|v| v.clone() as char).collect();
-    input.contains(";admin=true;")
+    encoding::ascii_encode(&input).contains(";admin=true;")
 }
 
 fn cbc_bitflipping_oracle(input: String) -> Vec<u8> {
@@ -504,7 +520,6 @@ pub mod cbc_padding_oracle_attack {
                         manipulated_block[15 - i] = intermediate[i] ^ target_padding;
                     }
 
-
                     let input = [&manipulated_block[..], &target_block[..]].concat();
                     if validate(input) {
                         decrypted_block.push(
@@ -513,7 +528,6 @@ pub mod cbc_padding_oracle_attack {
                         intermediate.push(guess ^ target_padding);
                         break;
                     }
-
                 }
             }
             plaintext.splice(0..0, decrypted_block.iter().rev().cloned());
@@ -522,8 +536,7 @@ pub mod cbc_padding_oracle_attack {
         }
 
         let plaintext = encoding::pkcs7_decode(&plaintext, 16).unwrap();
-
-        plaintext.iter().map(|v| v.clone() as char).collect()
+        encoding::ascii_encode(&plaintext)
     }
 
     fn oracle() -> (Vec<u8>, [u8; 16]) {
@@ -584,4 +597,144 @@ pub fn attack_fixed_nonce_ctr_ciphertexts(ciphertexts: Vec<Vec<u8>>) -> Vec<u8> 
     }
 
     keystream
+}
+
+fn edit_oracle(newtext: &[u8], offset: usize) -> Vec<u8> {
+    let key: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
+    let nonce = rand::rngs::SmallRng::seed_from_u64(4321).gen();
+
+    let text = std::fs::read_to_string("./test_input/set4_challenge25.txt").unwrap();
+    let ciphertext = ctr::encrypt(text.as_bytes(), &key, nonce).unwrap();
+
+    ctr::edit(&ciphertext, &key, nonce, offset, newtext).unwrap()
+}
+
+pub fn break_random_access_rw_ctr() -> Vec<u8> {
+    let ciphertext = edit_oracle(&vec![], std::usize::MAX);
+    let keystream = edit_oracle(&vec![0; ciphertext.len()], 0);
+
+    xor::fixed_xor(&ciphertext, &keystream)
+}
+
+pub fn ctr_bitflipping_attack() -> Vec<u8> {
+    // We will flip the ciphertext bits corresponding to ':' and '+' to get 'AAAAA;admin=true'
+    let oracle_input = "AAAAA:admin+true".to_string();
+
+    let ciphertext = ctr_bitflipping_oracle(oracle_input.clone());
+
+    let mut manipulated_ciphertext = ciphertext.clone();
+    let range: Vec<u8> = (0b00000000..=0b11111111).collect();
+    for i in range.iter().cloned() {
+        for j in range.iter().cloned() {
+            // We flip the 38th and 44th bytes
+            manipulated_ciphertext[37] = i;
+            manipulated_ciphertext[43] = j;
+            if is_bitflipped_ctr_ciphertext_admin(&manipulated_ciphertext) {
+                return manipulated_ciphertext;
+            }
+        }
+    }
+
+    unreachable!("brute force failed")
+}
+
+pub fn is_bitflipped_ctr_ciphertext_admin(input: &[u8]) -> bool {
+    // Random but constant key and nonce ( same as encrypt )
+    let key: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
+    let nonce = rand::rngs::SmallRng::seed_from_u64(4321).gen();
+
+    let input = ctr::decrypt(input, &key, nonce).unwrap();
+    encoding::ascii_encode(&input).contains(";admin=true;")
+}
+
+fn ctr_bitflipping_oracle(input: String) -> Vec<u8> {
+    // Random but constant key and nonce
+    let key: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
+    let nonce = rand::rngs::SmallRng::seed_from_u64(4321).gen();
+
+    let input = input.replace("=", "%3D");
+    let input = input.replace(";", "%3B");
+
+    let prefix = "comment1=cooking%20MCs;userdata=";
+    let suffix = ";comment2=%20like%20a%20pound%20of%20bacon";
+    let output = prefix.to_owned() + &input + suffix;
+
+    ctr::encrypt(output.as_bytes(), &key, nonce).unwrap()
+}
+
+pub mod insecure_cbc_iv_attack {
+    use super::*;
+
+    use std::error;
+    use std::fmt;
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct ValidationError {
+        text: Vec<u8>,
+    }
+
+    impl fmt::Display for ValidationError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "invalid plaintext")
+        }
+    }
+
+    impl error::Error for ValidationError {
+        fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+            // Generic error, underlying cause isn't tracked.
+            None
+        }
+    }
+
+    pub fn execute() -> Vec<u8> {
+        let four_blocks: String = vec![b'A'; 64].iter().map(|v| v.clone() as char).collect();
+        // AES-CBC(P_1, P_2, P_3) -> C_1, C_2, C_3
+        let mut ciphertext = encryption_oracle(four_blocks).unwrap();
+        // Manipulate ciphertext by setting C_1, C_2, C_3 -> C_1, 0, C_1
+        ciphertext.splice(16..32, vec![0; 16]);
+        ciphertext.splice(32..48, ciphertext[0..16].to_vec());
+
+        // The oracle will throw a high-ascii plaintext error that contains the plaintext (!)
+        let plaintext = decryption_oracle(&ciphertext).err().unwrap().text;
+
+        // Key is P'_1 XOR P'_3
+        xor::fixed_xor(&plaintext[0..16], &plaintext[32..48])
+    }
+
+    pub fn constant_key() -> [u8; 16] {
+        rand::rngs::SmallRng::seed_from_u64(1234).gen()
+    }
+
+    fn encryption_oracle(input: String) -> Result<Vec<u8>, ValidationError> {
+        is_valid_ascii(input.as_bytes())?;
+
+        // Random but constant key and nonce
+        let key = constant_key();
+        let iv = key;
+
+        Ok(cbc::encrypt(input.as_bytes(), &key, &iv).unwrap())
+    }
+
+    fn decryption_oracle(input: &[u8]) -> Result<bool, ValidationError> {
+        // Random but constant key and nonce ( same as encrypt )
+        let key = constant_key();
+        let iv = key;
+
+        let input = cbc::decrypt(input, &key, &iv).unwrap();
+        is_valid_ascii(&input)?;
+
+        Ok(encoding::ascii_encode(&input).contains(";admin=true;"))
+    }
+
+    fn is_valid_ascii(chars: &[u8]) -> Result<(), ValidationError> {
+        for c in chars.iter() {
+            if c < &32 {
+                return Err(ValidationError {
+                    text: chars.to_vec(),
+                });
+            }
+        }
+
+        Ok(())
+    }
 }

@@ -69,3 +69,7 @@ pub fn pkcs7_decode(bytes: &[u8], size: usize) -> Result<Vec<u8>, PKCS7DecodeErr
 
     Ok(output)
 }
+
+pub fn ascii_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|v| v.clone() as char).collect()
+}

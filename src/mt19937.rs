@@ -4,13 +4,12 @@
 
 use crate::bits;
 
-
 use rand::rngs::SmallRng;
 use rand::{thread_rng, Rng, SeedableRng};
 use std::time::{Duration, SystemTime};
+
 const LOWER_MASK: u32 = (1 << R) - 1;
 const UPPER_MASK: u32 = !LOWER_MASK;
-
 const W: u32 = 32;
 const N: usize = 624;
 const M: usize = 397;
@@ -18,19 +17,22 @@ const R: u32 = 31;
 
 pub struct MersenneRng {
     index: usize,
-    mt: Vec<u32>,
+    state: Vec<u32>,
 }
 
 impl MersenneRng {
     // Initialize the generator from a seed
     pub fn new(seed: u32) -> Self {
-        let mut mt = vec![seed];
+        let mut state = vec![seed];
         for i in 1..=(N - 1) {
-            let val: u64 =
-                (1812433253 as u64) * (mt[i - 1] ^ (mt[i - 1] >> (W - 2))) as u64 + (i as u64);
-            mt.push(val as u32);
+            let val: u64 = (1812433253 as u64) * (state[i - 1] ^ (state[i - 1] >> (W - 2))) as u64
+                + (i as u64);
+            state.push(val as u32);
         }
-        MersenneRng { index: N, mt: mt }
+        MersenneRng {
+            index: N,
+            state: state,
+        }
     }
 
     pub fn clone(samples: Vec<u32>) -> Self {
@@ -40,22 +42,18 @@ impl MersenneRng {
 
         MersenneRng {
             index: N,
-            mt: samples.iter().map(|n| untemper(*n)).collect(),
+            state: samples.iter().map(|n| untemper(*n)).collect(),
         }
     }
 
-    // Extract a tempered value based on MT[index]
+    // Extract a tempered value based on state[index]
     // calling twist() every N numbers
     pub fn extract_number(&mut self) -> u32 {
-        if self.index > N {
-            panic!("Generator was never seeded");
-        }
         if self.index == N {
-
             self.twist();
         }
 
-        let y = temper(self.mt[self.index]);
+        let y = temper(self.state[self.index]);
         self.index += 1;
 
         y
@@ -64,16 +62,30 @@ impl MersenneRng {
     // Generate the next N values from the series x_i
     fn twist(&mut self) {
         for i in 0..(N - 1) {
-            let x = (self.mt[i] & UPPER_MASK) + (self.mt[(i + 1) % N] & LOWER_MASK);
+            let x = (self.state[i] & UPPER_MASK) + (self.state[(i + 1) % N] & LOWER_MASK);
             let mut x_a = x >> 1;
             if (x % 2) != 0 {
                 // lowest bit of x is 1
                 x_a = x_a ^ 0x9908B0DF;
             }
-            self.mt[i] = self.mt[(i + M) % N] ^ x_a;
+            self.state[i] = self.state[(i + M) % N] ^ x_a;
         }
         self.index = 0;
     }
+}
+
+fn temper(y: u32) -> u32 {
+    let mut y = y ^ (y >> 11);
+    y ^= (y << 7) & 0x9D2C5680;
+    y ^= (y << 15) & 0xEFC60000;
+    y ^ (y >> 18)
+}
+
+fn untemper(y: u32) -> u32 {
+    let mut y = bits::invert_right_shift_xor(18, y);
+    y = bits::invert_left_shift_and_xor(15, y, 0xEFC60000);
+    y = bits::invert_left_shift_and_xor(7, y, 0x9D2C5680);
+    bits::invert_right_shift_xor(11, y)
 }
 
 pub fn mt_cipher_encrypt(key: u16, bytes: &[u8]) -> Vec<u8> {
@@ -129,7 +141,8 @@ pub fn mt_encryption_oracle(bytes: &[u8]) -> Vec<u8> {
 fn random_token() -> u32 {
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap().as_secs() as u32;
+        .unwrap()
+        .as_secs() as u32;
 
     MersenneRng::new(now).extract_number()
 }
@@ -137,20 +150,6 @@ fn random_token() -> u32 {
 pub fn detect_timestamp_seeded_token() -> bool {
     guess_unix_timestamp_seed(random_token());
     true
-}
-
-fn temper(y: u32) -> u32 {
-    let mut y = y ^ (y >> 11);
-    y ^= (y << 7) & 0x9D2C5680;
-    y ^= (y << 15) & 0xEFC60000;
-    y ^ (y >> 18)
-}
-
-fn untemper(y: u32) -> u32 {
-    let mut y = bits::invert_right_shift_xor(18, y);
-    y = bits::invert_left_shift_and_xor(15, y, 0xEFC60000);
-    y = bits::invert_left_shift_and_xor(7, y, 0x9D2C5680);
-    bits::invert_right_shift_xor(11, y)
 }
 
 // Wait a random number of seconds between 40 and 1000.

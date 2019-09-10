@@ -1,14 +1,23 @@
-#![allow(dead_code, unused_imports)]
+#![allow(dead_code, unused_imports, non_snake_case)]
+#![feature(proc_macro_hygiene, decl_macro)]
+
+#[macro_use]
+extern crate rocket;
 
 use rand::Rng;
 use std::{fs, str};
 
 mod aes128;
 mod bits;
+mod dh;
 mod encoding;
+mod hmac;
 mod mt19937;
 mod query_string;
+mod rsa;
 mod score;
+mod sha1;
+mod srp;
 mod vigenere;
 mod xor;
 
@@ -74,15 +83,13 @@ I go crazy when I hear a cymbal"
 // Set 1 Challenge 6
 #[test]
 fn break_repeating_xor_key() {
+    let plaintext_bytes = vigenere::break_repeating_key_xor(
+        fs::read_to_string("./test_input/set1challenge6.txt").unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         "Terminator X: Bring the noise".to_string(),
-        vigenere::break_repeating_key_xor(
-            fs::read_to_string("./test_input/set1challenge6.txt").unwrap()
-        )
-        .unwrap()
-        .iter()
-        .map(|v| v.clone() as char)
-        .collect::<String>()
+        encoding::ascii_encode(&plaintext_bytes)
     );
 }
 
@@ -193,7 +200,6 @@ fn break_aes_ecb() {
     aes128::decrypt_aes_ecb_byte_at_a_time());
 }
 
-
 // Set 2 Challenge 13
 #[test]
 fn ecb_cut_paste() {
@@ -269,13 +275,7 @@ fn ctr_encryption() {
     let plaintext = "testing a very very very loooooooooong string";
     let ciphertext = aes128::ctr::encrypt(plaintext.as_bytes(), key, nonce).unwrap();
     let decrypted = aes128::ctr::decrypt(&ciphertext, key, nonce).unwrap();
-    assert_eq!(
-        plaintext,
-        decrypted
-            .iter()
-            .map(|v| v.clone() as char)
-            .collect::<String>()
-    );
+    assert_eq!(plaintext, encoding::ascii_encode(&decrypted));
 
     let plaintext_bytes = aes128::ctr::decrypt(
         &base64::decode("L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==")
@@ -285,10 +285,9 @@ fn ctr_encryption() {
     )
     .unwrap();
 
-    let plaintext: String = plaintext_bytes.iter().map(|v| v.clone() as char).collect();
     assert_eq!(
         "Yo, VIP Let\'s kick it Ice, Ice, baby Ice, Ice, baby ".to_string(),
-        plaintext
+        encoding::ascii_encode(&plaintext_bytes)
     );
 }
 
@@ -341,7 +340,6 @@ fn mt19937_gen() {
     let m2 = rng2.extract_number();
     let m3 = rng2.extract_number();
 
-
     assert_eq!(n1, m1);
     assert_eq!(n2, m2);
     assert_eq!(n3, m3);
@@ -375,11 +373,177 @@ fn clone_mt19937() {
 }
 
 // Set 3 Challenge 24
+#[test]
 // skip slow brute force test
-//#[test]
-fn break_mt19937_cipher() {
+#[ignore]
+fn brute_force_mt19937_cipher() {
     let key = 43210;
     assert_eq!(key, mt19937::break_mt_cipher());
 
     assert!(mt19937::detect_timestamp_seeded_token());
+}
+
+// Set 4 Challenge 25
+#[test]
+fn break_aes_ctr_random_rw() {
+    let plaintext = std::fs::read("./test_input/set4_challenge25.txt").unwrap();
+    assert_eq!(plaintext, aes128::break_random_access_rw_ctr())
+}
+
+// Set 4 Challenge 26
+#[test]
+fn ctr_bitflipping() {
+    let chosen_ciphertext = aes128::ctr_bitflipping_attack();
+    assert_eq!(
+        true,
+        aes128::is_bitflipped_ctr_ciphertext_admin(&chosen_ciphertext)
+    );
+}
+
+// Set 4 Challenge 27
+#[test]
+fn find_cbc_key_when_iv_equals_key() {
+    assert_eq!(
+        aes128::insecure_cbc_iv_attack::constant_key().to_vec(),
+        aes128::insecure_cbc_iv_attack::execute()
+    )
+}
+
+// Set 4 Challenge 28
+#[test]
+fn sha1_keyed_mac() {
+    let mac1 = sha1::keyed_mac(b"YELLOW SUBMARINE", b"HELLO WORLD");
+    let mac2 = sha1::keyed_mac(b"YELLOW SUBMARINE", b"HELLO MARS");
+    assert_ne!(mac1, mac2);
+
+    let mac3 = sha1::keyed_mac(b"ORANGE SUBMARINE", b"HELLO WORLD");
+    assert_ne!(mac1, mac3);
+}
+
+// Set 4 Challenge 29
+#[test]
+fn sha1_length_extension_attack() {
+    let (message, mac) = sha1::length_extension_attack::execute();
+    assert!(sha1::length_extension_attack::is_admin(&message, &mac));
+}
+
+// Set 4 Challenge 31 and 32
+#[test]
+// Ignore slow test
+#[ignore]
+fn hmac_timing_attack() {
+    assert_eq!(
+        hmac::timing_attack_1::execute("foo".to_string()),
+        "dea3f511e5baa6b483da601a5ad43b03d9cbb4cf"
+    )
+}
+
+// Set 5 Challenge 33
+#[test]
+fn diffie_hellman() {
+    let alice_secret = dh::ephemeral_secret();
+    let bob_secret = dh::ephemeral_secret();
+
+    let alice_pub_key = dh::public_key(&dh::chosen_prime(), &dh::primitive_root(), &alice_secret);
+    let bob_pub_key = dh::public_key(&dh::chosen_prime(), &dh::primitive_root(), &bob_secret);
+
+    let alice_shared_secret = alice_secret.diffie_hellman(&bob_pub_key);
+    let bob_shared_secret = bob_secret.diffie_hellman(&alice_pub_key);
+
+    assert_eq!(alice_shared_secret, bob_shared_secret);
+}
+
+// Set 5 Challenge 34
+#[test]
+fn diffie_hellman_mitm_pk() {
+    dh::mitm::malicious_public_key();
+}
+
+// Set 5 Challenge 35
+#[test]
+fn diffie_hellman_mitm_g() {
+    dh::mitm::malicious_primitive_root();
+}
+
+// Set 5 Challenge 36
+#[test]
+fn secure_remote_password() {
+    let mut s = srp::Server::new(
+        123321,
+        "test@example.com".to_string(),
+        "password".to_string(),
+    );
+    let c = srp::Client::new(
+        123321,
+        "test@example.com".to_string(),
+        "password".to_string(),
+    );
+
+    let (I, A) = c.initiate_handshake();
+    let (salt, server_public_key) = s.accept_handshake(I, &A);
+    let hashed_key = c.complete_handshake(salt, &server_public_key);
+    s.complete_handshake(&hashed_key);
+}
+
+// Set 5 Challenge 37
+#[test]
+fn zero_key_srp_attack() {
+    use num_traits::cast::FromPrimitive;
+
+    let mut s = srp::Server::new(
+        123321,
+        "test@example.com".to_string(),
+        "password".to_string(),
+    );
+    let c = srp::ZeroKeyClient::new(
+        num_bigint::BigUint::from_u64(0).unwrap(),
+        "test@example.com".to_string(),
+    );
+
+    let (I, A) = c.initiate_handshake();
+    let (salt, server_public_key) = s.accept_handshake(I, &A);
+    let hashed_key = c.complete_handshake(salt, &server_public_key);
+    assert!(s.complete_handshake(&hashed_key));
+}
+
+// Set 5 Challenge 38
+#[test]
+fn simplified_srp_dict_attack() {
+    let mut s = srp::SimpleServer::new("test@example.com".to_string(), "password".to_string());
+    let c = srp::SimpleClient::new("test@example.com".to_string(), "password".to_string());
+
+    // assert handshake works with a valid client, server
+    let (email, client_public_key) = c.initiate_handshake();
+    let (salt, server_public_key, large_random_number) =
+        s.accept_handshake(email, &client_public_key);
+    let hashed_key = c.complete_handshake(salt, &server_public_key, &large_random_number);
+    assert!(s.complete_handshake(&hashed_key));
+
+    // test MITM attack on client
+    let chosen_weak_password = "password".to_string();
+    let c = srp::SimpleClient::new("test@example.com".to_string(), chosen_weak_password.clone());
+    let cracked_password = srp::simple_srp_offline_dict_mitm(
+        &c,
+        std::fs::read_to_string("./test_input/password_dictonary.txt")
+            .unwrap()
+            .lines(),
+    );
+    assert_eq!(chosen_weak_password, cracked_password);
+}
+
+// Set 5 Challenge 39
+#[test]
+fn rsa() {
+    let plaintext = "BIG YELLOW SUBMARINE";
+    let r = rsa::RSA::new();
+    let ciphertext = r.encrypt(plaintext.as_bytes());
+    let decrypted = r.decrypt(&ciphertext);
+
+    assert_eq!(plaintext, encoding::ascii_encode(&decrypted));
+}
+
+// Set 5 Challenge 40
+#[test]
+fn rsa_broadcast_attack() {
+    assert!(rsa::broadcast_attack());
 }
