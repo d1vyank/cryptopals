@@ -20,8 +20,8 @@ pub fn public_key(p: &BigUint, g: &BigUint, chosen_secret: &Secret) -> BigUint {
 }
 
 pub fn ephemeral_secret() -> Secret {
-    let low = std::u8::MIN.to_biguint().unwrap();
-    let high = std::u8::MAX.to_biguint().unwrap();
+    let low = std::u128::MIN.to_biguint().unwrap();
+    let high = std::u128::MAX.to_biguint().unwrap();
     Secret {
         key: thread_rng().gen_biguint_range(&low, &high),
     }

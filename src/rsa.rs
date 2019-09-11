@@ -1,8 +1,8 @@
-use num_bigint::ToBigInt;
-use num_bigint::{BigInt, BigUint, Sign};
+use num_bigint::{BigInt, BigUint, RandBigInt, Sign, ToBigInt, ToBigUint};
 use num_traits::cast::{FromPrimitive, ToPrimitive};
 use num_traits::identities::{One, Zero};
 use openssl::bn::BigNum;
+use rand::{self, thread_rng, Rng};
 
 use crate::encoding;
 
@@ -106,6 +106,34 @@ pub fn broadcast_attack() -> bool {
 
     assert_eq!(decrypted, plaintext);
     true
+}
+
+pub struct VulnerableServer {
+    rsa: RSA,
+}
+
+impl VulnerableServer {
+    pub fn new() -> Self {
+        VulnerableServer { rsa: RSA::new() }
+    }
+    pub fn unpadded_msg_oracle(&self, msg: &[u8]) -> Vec<u8> {
+        self.rsa.decrypt(msg)
+    }
+    pub fn public_key(&self) -> (BigUint, BigUint) {
+        self.rsa.public_key()
+    }
+}
+
+pub fn recover_unpadded_message(server: VulnerableServer, c: &[u8]) -> Vec<u8> {
+    let c = BigUint::from_bytes_be(c);
+    let (e, N) = server.public_key();
+
+    let S = BigUint::from_u64(2).unwrap();
+
+    let c_ = (S.modpow(&e, &N.clone()) * c) % N.clone();
+    let p_ = server.unpadded_msg_oracle(&c_.to_bytes_be());
+
+    (BigUint::from_bytes_be(&p_) * invmod(&S, &N) % N).to_bytes_be()
 }
 
 #[test]

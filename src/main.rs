@@ -547,3 +547,16 @@ fn rsa() {
 fn rsa_broadcast_attack() {
     assert!(rsa::broadcast_attack());
 }
+
+#[test]
+fn rsa_unpadded_message_recovery() {
+    use num_bigint::BigUint;
+
+    let plaintext = "BIG YELLOW SUBMARINE";
+    let s = rsa::VulnerableServer::new();
+    let (e, N) = s.public_key();
+    let c = BigUint::from_bytes_be(plaintext.as_bytes()).modpow(&e, &N);
+    let recovered_plaintext = rsa::recover_unpadded_message(s, &c.to_bytes_be());
+
+    assert_eq!(plaintext, encoding::ascii_encode(&recovered_plaintext))
+}
