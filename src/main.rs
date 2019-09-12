@@ -548,6 +548,7 @@ fn rsa_broadcast_attack() {
     assert!(rsa::broadcast_attack());
 }
 
+// Set 6 Challenge 41
 #[test]
 fn rsa_unpadded_message_recovery() {
     use num_bigint::BigUint;
@@ -559,4 +560,22 @@ fn rsa_unpadded_message_recovery() {
     let recovered_plaintext = rsa::recover_unpadded_message(s, &c.to_bytes_be());
 
     assert_eq!(plaintext, encoding::ascii_encode(&recovered_plaintext))
+}
+
+// Set 6 Challenge 42
+#[test]
+fn rsa_signature_forgery() {
+    let plaintext = "BIG YELLOW SUBMARINE";
+    let r = rsa::RSA::new();
+
+    let signature = r.sign(plaintext.as_bytes());
+    let verified_plaintext = r.verify(&signature);
+    assert_eq!(plaintext, encoding::ascii_encode(&verified_plaintext));
+
+    let plaintext = "hi mom";
+    let forged_signature = rsa::forge_rsa_signature(plaintext.to_string());
+    assert_eq!(
+        plaintext,
+        encoding::ascii_encode(&r.verify(&forged_signature)),
+    )
 }

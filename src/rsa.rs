@@ -5,6 +5,7 @@ use openssl::bn::BigNum;
 use rand::{self, thread_rng, Rng};
 
 use crate::encoding;
+use crate::sha1;
 
 pub struct RSA {
     /// (e, n) tuple
@@ -23,7 +24,6 @@ impl RSA {
         let e = BigUint::from_u64(3).unwrap();
 
         let d = invmod(&e, &et);
-
         RSA {
             public_key: (e, n.clone()),
             private_key: (d, n),
@@ -44,11 +44,82 @@ impl RSA {
         c.modpow(&self.private_key.0, &self.private_key.1)
             .to_bytes_be()
     }
+
+    pub fn sign(&self, bytes: &[u8]) -> Vec<u8> {
+        let hashed_bytes = sha1::hash(bytes);
+        let out = [bytes, &hashed_bytes].concat();
+        let out = self.pad_to_1024(&out);
+        // sign with private key
+        self.decrypt(&out)
+    }
+
+    pub fn verify(&self, bytes: &[u8]) -> Vec<u8> {
+        // decrypt signature with public key
+        let bytes = self.encrypt(bytes);
+        let bytes = self.bad_parse(&bytes);
+        let hash = sha1::hash(&bytes[0..bytes.len() - 20]);
+        if hash != &bytes[bytes.len() - 20..] {
+            panic!("verification failed");
+        }
+
+        bytes[0..bytes.len() - 20].to_vec()
+    }
+
+    fn bad_parse(&self, bytes: &[u8]) -> Vec<u8> {
+        let mut valid = true;
+        if bytes[0] != 1 {
+            valid = false;
+        }
+        if bytes[1] != 0 {
+            valid = false;
+        }
+        let mut index = 2;
+        loop {
+            if bytes[index] != std::u8::MAX {
+                break;
+            }
+            index += 1;
+        }
+        if bytes[index] != 0 {
+            valid = false;
+        }
+        index += 1;
+
+        let len = u32::from_be_bytes([
+            bytes[index],
+            bytes[index + 1],
+            bytes[index + 2],
+            bytes[index + 3],
+        ]) as usize;
+        index += 4;
+        if !valid {
+            panic!("bad padding");
+        }
+
+        bytes[index..index + len].to_vec()
+    }
+
+    // padding format is 01h 00h ffh ffh ... ffh ffh 00h 32bitLength String+SHA1
+    fn pad_to_1024(&self, bytes: &[u8]) -> Vec<u8> {
+        let mut out = vec![];
+        let len = bytes.len() as u32;
+
+        out.push(1);
+        out.push(0);
+        // 7 comes from the 0 and 1 in the beginning, the 0 byte at the end, plus four for the length
+        for _ in 0..(128 - 7 - len) {
+            out.push(std::u8::MAX);
+        }
+        out.push(0);
+        out.append(&mut len.to_be_bytes().to_vec());
+        out.append(&mut bytes.to_vec());
+        out
+    }
 }
 
 fn generate_random_prime() -> BigUint {
     let mut b = BigNum::new().unwrap();
-    b.generate_prime(512, false, None, None).unwrap();
+    b.generate_prime(1024, false, None, None).unwrap();
     BigUint::from_bytes_be(&b.to_vec())
 }
 
@@ -134,6 +205,20 @@ pub fn recover_unpadded_message(server: VulnerableServer, c: &[u8]) -> Vec<u8> {
     let p_ = server.unpadded_msg_oracle(&c_.to_bytes_be());
 
     (BigUint::from_bytes_be(&p_) * invmod(&S, &N) % N).to_bytes_be()
+}
+
+pub fn forge_rsa_signature(message: String) -> Vec<u8> {
+    let message = message.as_bytes();
+    let hash = sha1::hash(&message);
+    let len = (message.len() + hash.len()) as u32;
+    let padding: Vec<u8> = vec![1, 0, 255, 0];
+    let mut out = [padding, len.to_be_bytes().to_vec(), message.to_vec(), hash].concat();
+    // fill with garbage, using three gives us something closer to a perfect cube
+    for _ in 0..(128 - out.len()) {
+        out.push(3);
+    }
+
+    BigUint::from_bytes_be(&out).nth_root(3).to_bytes_be()
 }
 
 #[test]
