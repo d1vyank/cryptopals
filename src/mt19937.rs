@@ -1,11 +1,7 @@
-// Create a length N array to store the state of the generator
-// int[0..N-1] MTs
-// int index := N+1
-
 use crate::bits;
 
 use rand::rngs::SmallRng;
-use rand::{thread_rng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 use std::time::{Duration, SystemTime};
 
 const LOWER_MASK: u32 = (1 << R) - 1;

@@ -1,10 +1,9 @@
-use num_bigint::{BigInt, BigUint, RandBigInt, Sign, ToBigInt, ToBigUint};
-use num_traits::cast::{FromPrimitive, ToPrimitive};
-use num_traits::identities::{One, Zero};
+use num_bigint::BigUint;
+use num_traits::cast::FromPrimitive;
 use openssl::bn::BigNum;
-use rand::{self, thread_rng, Rng};
 
 use crate::encoding;
+use crate::math;
 use crate::sha1;
 
 pub struct RSA {
@@ -23,7 +22,7 @@ impl RSA {
         let et = (p - 1u32) * (q - 1u32);
         let e = BigUint::from_u64(3).unwrap();
 
-        let d = invmod(&e, &et);
+        let d = math::invmod(&e, &et);
         RSA {
             public_key: (e, n.clone()),
             private_key: (d, n),
@@ -56,6 +55,7 @@ impl RSA {
     pub fn verify(&self, bytes: &[u8]) -> Vec<u8> {
         // decrypt signature with public key
         let bytes = self.encrypt(bytes);
+
         let bytes = self.bad_parse(&bytes);
         let hash = sha1::hash(&bytes[0..bytes.len() - 20]);
         if hash != &bytes[bytes.len() - 20..] {
@@ -123,32 +123,6 @@ fn generate_random_prime() -> BigUint {
     BigUint::from_bytes_be(&b.to_vec())
 }
 
-fn invmod(a0: &BigUint, m0: &BigUint) -> BigUint {
-    let (a0, m0) = (a0.to_bigint().unwrap(), m0.to_bigint().unwrap());
-
-    if m0 == BigInt::one() {
-        return BigUint::one();
-    }
-    let (mut a, mut m, mut x0, mut inv) = (
-        a0.clone(),
-        m0.clone(),
-        BigInt::from_u64(0).unwrap(),
-        BigInt::from_u64(1).unwrap(),
-    );
-    while a > BigInt::one() {
-        inv -= (a.clone() / m.clone()) * x0.clone();
-        a = a.clone() % m.clone();
-        std::mem::swap(&mut a, &mut m);
-        std::mem::swap(&mut x0, &mut inv);
-    }
-
-    if inv < BigInt::zero() {
-        inv += m0.clone()
-    }
-
-    inv.to_biguint().unwrap()
-}
-
 pub fn broadcast_attack() -> bool {
     let plaintext = "Big Yellow Submarine";
     let (r1, r2, r3) = (RSA::new(), RSA::new(), RSA::new());
@@ -168,9 +142,9 @@ pub fn broadcast_attack() -> bool {
     let m_s_3 = n1.clone() * n2.clone();
     let n_123 = n1.clone() * n2.clone() * n3.clone();
 
-    let c = (c1 * m_s_1.clone() * invmod(&m_s_1, &n1))
-        + (c2 * m_s_2.clone() * invmod(&m_s_2, &n2))
-        + (c3 * m_s_3.clone() * invmod(&m_s_3, &n3));
+    let c = (c1 * m_s_1.clone() * math::invmod(&m_s_1, &n1))
+        + (c2 * m_s_2.clone() * math::invmod(&m_s_2, &n2))
+        + (c3 * m_s_3.clone() * math::invmod(&m_s_3, &n3));
     let c = c % n_123;
 
     let decrypted = encoding::ascii_encode(&c.nth_root(3).to_bytes_be());
@@ -204,7 +178,7 @@ pub fn recover_unpadded_message(server: VulnerableServer, c: &[u8]) -> Vec<u8> {
     let c_ = (S.modpow(&e, &N.clone()) * c) % N.clone();
     let p_ = server.unpadded_msg_oracle(&c_.to_bytes_be());
 
-    (BigUint::from_bytes_be(&p_) * invmod(&S, &N) % N).to_bytes_be()
+    (BigUint::from_bytes_be(&p_) * math::invmod(&S, &N) % N).to_bytes_be()
 }
 
 pub fn forge_rsa_signature(message: String) -> Vec<u8> {
@@ -213,28 +187,11 @@ pub fn forge_rsa_signature(message: String) -> Vec<u8> {
     let len = (message.len() + hash.len()) as u32;
     let padding: Vec<u8> = vec![1, 0, 255, 0];
     let mut out = [padding, len.to_be_bytes().to_vec(), message.to_vec(), hash].concat();
+
     // fill with garbage, using three gives us something closer to a perfect cube
     for _ in 0..(128 - out.len()) {
         out.push(3);
     }
 
     BigUint::from_bytes_be(&out).nth_root(3).to_bytes_be()
-}
-
-#[test]
-fn inverse_modulus() {
-    assert_eq!(
-        BigUint::from_u64(1969).unwrap(),
-        invmod(
-            &BigUint::from_u64(42).unwrap(),
-            &BigUint::from_u64(2017).unwrap()
-        )
-    );
-    assert_eq!(
-        BigUint::from_u64(2753).unwrap(),
-        invmod(
-            &BigUint::from_u64(17).unwrap(),
-            &BigUint::from_u64(3120).unwrap()
-        )
-    );
 }

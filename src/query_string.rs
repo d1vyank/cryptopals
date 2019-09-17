@@ -1,10 +1,8 @@
-
-use rand::{rngs, thread_rng, Rng, SeedableRng};
+use rand::{rngs, Rng, SeedableRng};
 use std::collections::HashMap;
 use url::form_urlencoded;
 
 use crate::aes128;
-use crate::encoding;
 
 pub fn parse(s: String) -> HashMap<String, String> {
     form_urlencoded::parse(s.as_bytes()).into_owned().collect()

@@ -1,6 +1,4 @@
-use crate::encoding;
 use crate::sha1;
-use crate::xor;
 
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
@@ -24,9 +22,6 @@ pub fn compute(key: &[u8], bytes: &[u8]) -> Vec<u8> {
 
 pub mod timing_attack_1 {
     use super::*;
-    use crypto::digest::Digest;
-    use crypto::mac::Mac;
-    use crypto::sha1::{self, Sha1};
     use rocket::http::Status;
     use rocket::local::Client;
     use rocket::Rocket;

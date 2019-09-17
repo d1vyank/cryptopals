@@ -1,8 +1,6 @@
 use crypto::digest::Digest;
 use crypto::sha1::{self, Sha1};
-use num_bigint::BigUint;
-use rand::rngs::SmallRng;
-use rand::{thread_rng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 
 use crate::encoding;
 

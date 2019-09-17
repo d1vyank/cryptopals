@@ -3,7 +3,7 @@ use crypto::hmac::Hmac;
 use crypto::mac::Mac;
 use crypto::sha2::Sha256;
 use num_bigint::{BigUint, RandBigInt, ToBigUint};
-use num_traits::cast::{FromPrimitive, ToPrimitive};
+use num_traits::cast::FromPrimitive;
 use num_traits::pow::Pow;
 use rand::{self, thread_rng, Rng};
 
@@ -205,7 +205,7 @@ impl SimpleServer {
     }
 
     pub fn complete_handshake(&self, hashed_key: &[u8]) -> bool {
-        let S = (self.client_public_key.clone() * self.v.pow(self.u.to_u128().unwrap()))
+        let S = (self.client_public_key.clone() * self.v.pow(&self.u))
             .modpow(&self.secret.key.clone(), &dh::chosen_prime());
 
         let K = sha256_hash(&S.to_bytes_be());
@@ -269,7 +269,7 @@ where
 
         let v = dh::primitive_root().pow(x) % dh::chosen_prime();
 
-        let S = (A.clone() * v.pow(u.to_u128().unwrap())).modpow(&b, &dh::chosen_prime());
+        let S = (A.clone() * v.pow(&u)).modpow(&b, &dh::chosen_prime());
         let K = sha256_hash(&S.to_bytes_be());
 
         if hmac_sha256(&K, &salt.to_be_bytes()) == hashed_key {

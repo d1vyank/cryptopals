@@ -1,17 +1,16 @@
-#![allow(dead_code, unused_imports, non_snake_case)]
+#![allow(dead_code, non_snake_case)]
 #![feature(proc_macro_hygiene, decl_macro)]
 
 #[macro_use]
 extern crate rocket;
 
-use rand::Rng;
-use std::{fs, str};
-
 mod aes128;
 mod bits;
 mod dh;
+mod dsa;
 mod encoding;
 mod hmac;
+mod math;
 mod mt19937;
 mod query_string;
 mod rsa;
@@ -84,7 +83,7 @@ I go crazy when I hear a cymbal"
 #[test]
 fn break_repeating_xor_key() {
     let plaintext_bytes = vigenere::break_repeating_key_xor(
-        fs::read_to_string("./test_input/set1challenge6.txt").unwrap(),
+        std::fs::read_to_string("./test_input/set1challenge6.txt").unwrap(),
     )
     .unwrap();
     assert_eq!(
@@ -100,7 +99,7 @@ fn aes_128_ecb_decrypt() {
 
     let key = "YELLOW SUBMARINE".as_bytes();
     let ciphertext = base64::decode(
-        &fs::read_to_string("./test_input/set1challenge7.txt")
+        &std::fs::read_to_string("./test_input/set1challenge7.txt")
             .unwrap()
             .lines()
             .collect::<String>(),
@@ -108,7 +107,7 @@ fn aes_128_ecb_decrypt() {
     .unwrap();
 
     let decrypted = aes128::ecb::decrypt(ciphertext.as_slice(), key).unwrap();
-    let decrypted_string = str::from_utf8(&decrypted).unwrap();
+    let decrypted_string = std::str::from_utf8(&decrypted).unwrap();
 
     assert_eq!(plaintext, decrypted_string);
 
@@ -119,7 +118,7 @@ fn aes_128_ecb_decrypt() {
 // Set 1 Challenge 8
 #[test]
 fn detect_aes() {
-    let content = fs::read_to_string("./test_input/set1challenge8.txt").unwrap();
+    let content = std::fs::read_to_string("./test_input/set1challenge8.txt").unwrap();
 
     for (i, line) in content.lines().enumerate() {
         if i == 132 {
@@ -159,7 +158,7 @@ fn aes_cbc() {
     let key = b"YELLOW SUBMARINE";
     let iv: [u8; 16] = [0; 16];
     let ciphertext = base64::decode(
-        &fs::read_to_string("./test_input/set2challenge10.txt")
+        &std::fs::read_to_string("./test_input/set2challenge10.txt")
             .unwrap()
             .lines()
             .collect::<String>(),
@@ -167,7 +166,7 @@ fn aes_cbc() {
     .unwrap();
 
     let decrypted_bytes = aes128::cbc::decrypt(&ciphertext, key, &iv).unwrap();
-    let decrypted_string = str::from_utf8(&decrypted_bytes).unwrap();
+    let decrypted_string = std::str::from_utf8(&decrypted_bytes).unwrap();
     assert_eq!(plaintext, decrypted_string);
 
     let encrypted_bytes = aes128::cbc::encrypt(&decrypted_bytes, key, &iv).unwrap();
@@ -260,7 +259,7 @@ fn cbc_bitflipping() {
 // Set 3 Challenge 17
 #[test]
 fn cbc_oracle_padding() {
-    let decrypted_strings = fs::read_to_string("./test_input/set3_challenge17.txt").unwrap();
+    let decrypted_strings = std::fs::read_to_string("./test_input/set3_challenge17.txt").unwrap();
 
     let plaintext = aes128::cbc_padding_oracle_attack::execute();
     assert!(decrypted_strings.contains(&plaintext));
@@ -577,5 +576,41 @@ fn rsa_signature_forgery() {
     assert_eq!(
         plaintext,
         encoding::ascii_encode(&r.verify(&forged_signature)),
+    )
+}
+
+// Set 6 Challenge 43
+#[test]
+// Ignore slow nonce bruteforce
+#[ignore]
+fn dsa_key_recovery() {
+    use num_bigint::{BigInt, BigUint};
+    let message = format!(
+        "For those that envy a MC it can be hazardous to your health
+So be friendly, a matter of life and death, just like a etch-a-sketch\n"
+    );
+
+    assert_eq!(
+        hex::encode(sha1::hash(message.as_bytes())),
+        "d2d0714f014a9784047eaeccf956520045c45265"
+    );
+
+    let pub_key = BigUint::parse_bytes("84ad4719d044495496a3201c8ff484feb45b962e7302e56a392aee4abab3e4bdebf2955b4736012f21a08084056b19bcd7fee56048e004e44984e2f411788efdc837a0d2e5abb7b555039fd243ac01f0fb2ed1dec568280ce678e931868d23eb095fde9d3779191b8c0299d6e07bbb283e6633451e535c45513b2d33c99ea17".as_bytes(), 16).unwrap();
+    let r =
+        BigUint::from_bytes_be(&hex::decode("60019CACDC56EEDF8E080984BFA898C8C5C419A8").unwrap());
+    let s =
+        BigUint::from_bytes_be(&hex::decode("961F2062EFC3C68DB965A90C924CF76580EC1BBC").unwrap());
+
+    let v = dsa::DSA::new_verifier(pub_key.clone());
+    assert!(v.verify(message.as_bytes(), (r.clone(), s.clone())));
+
+    let key = dsa::recover_private_key_weak_nonce(
+        message,
+        (BigInt::from(r), BigInt::from(s)),
+        BigInt::from(pub_key),
+    );
+    assert_eq!(
+        hex::decode("0954edd5e0afe5542a4adf012611a91912a3ec16").unwrap(),
+        sha1::hash(hex::encode(&key.to_bytes_be().1).as_bytes())
     )
 }
