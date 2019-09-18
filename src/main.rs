@@ -614,3 +614,39 @@ So be friendly, a matter of life and death, just like a etch-a-sketch\n"
         sha1::hash(hex::encode(&key.to_bytes_be().1).as_bytes())
     )
 }
+
+// Set 6 Challenge 44
+#[test]
+fn dsa_key_recovery2() {
+    use num_bigint::{BigInt, Sign};
+
+    let pub_key = BigInt::parse_bytes("2d026f4bf30195ede3a088da85e398ef869611d0f68f0713d51c9c1a3a26c95105d915e2d8cdf26d056b86b8a7b85519b1c23cc3ecdc6062650462e3063bd179c2a6581519f674a61f1d89a1fff27171ebc1b93d4dc57bceb7ae2430f98a6a4d83d8279ee65d71c1203d2c96d65ebbf7cce9d32971c3de5084cce04a2e147821".as_bytes(), 16).unwrap();
+
+    let r = BigInt::from_bytes_be(
+        Sign::Plus,
+        &hex::decode("281CAB682EA0C19C68AFB59F858338D3AA635CC5").unwrap(),
+    );
+
+    let m1 = BigInt::from_bytes_be(
+        Sign::Plus,
+        &hex::decode("21194f72fe39a80c9c20689b8cf6ce9b0e7e52d4").unwrap(),
+    );
+    let s1 = BigInt::from_bytes_be(
+        Sign::Plus,
+        &hex::decode("30AFE50E59BDBD5E0D46E34C141BD964B93C7CDB").unwrap(),
+    );
+    let m2 = BigInt::from_bytes_be(
+        Sign::Plus,
+        &hex::decode("d6340bfcda59b6b75b59ca634813d572de800e8f").unwrap(),
+    );
+    let s2 = BigInt::from_bytes_be(
+        Sign::Plus,
+        &hex::decode("504CAB8BC826DCCC289D18070ADCE2EAA31D244F").unwrap(),
+    );
+
+    let key = dsa::recover_private_key_repeated_nonce(pub_key, s1, s2, m1, m2, r);
+    assert_eq!(
+        hex::decode("ca8f6f7c66fa362d40760d135b763eb8527d3d52").unwrap(),
+        sha1::hash(hex::encode(&key.to_bytes_be().1).as_bytes())
+    )
+}

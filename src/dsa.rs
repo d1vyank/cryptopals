@@ -83,6 +83,35 @@ pub fn recover_private_key_weak_nonce(
     panic!("key not found");
 }
 
+pub fn recover_private_key_repeated_nonce(
+    pub_key: BigInt,
+    s1: BigInt,
+    s2: BigInt,
+    m1: BigInt,
+    m2: BigInt,
+    r: BigInt,
+) -> BigInt {
+    let q_ = BigInt::from(q());
+    let g_ = BigInt::from(g());
+    let p_ = BigInt::from(p());
+
+    let m_diff = ((m1.clone() - (m2)) % q_.clone()) + q_.clone();
+    let s_diff = ((s1.clone() - (s2)) % q_.clone()) + q_.clone();
+    let s_diff_inv = math::invmod(&BigUint::from_bytes_be(&s_diff.to_bytes_be().1), &q());
+    let s_diff_inv = BigInt::from(s_diff_inv);
+    let k = m_diff * s_diff_inv % q_.clone();
+
+    let r_inv = BigInt::from(math::invmod(
+        &BigUint::from_bytes_be(&r.to_bytes_be().1),
+        &q(),
+    ));
+    let x = (((s1.clone() * k) % q_.clone()) - m1.clone()) * r_inv % q_.clone();
+
+    assert_eq!(g_.modpow(&x, &p_), pub_key);
+
+    x
+}
+
 fn p() -> BigUint {
     BigUint::from_bytes_be(&hex::decode("800000000000000089e1855218a0e7dac38136ffafa72eda7859f2171e25e65eac698c1702578b07dc2a1076da241c76c62d374d8389ea5aeffd3226a0530cc565f3bf6b50929139ebeac04f48c3c84afb796d61e5a4f9a8fda812ab59494232c7d2b4deb50aa18ee9e132bfa85ac4374d7f9091abc3d015efc871a584471bb1").unwrap())
 }
