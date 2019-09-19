@@ -650,3 +650,24 @@ fn dsa_key_recovery2() {
         sha1::hash(hex::encode(&key.to_bytes_be().1).as_bytes())
     )
 }
+
+// Set 6 Challenge 45
+#[test]
+fn dsa_parameter_tampering() {
+    use num_bigint::BigUint;
+    use num_traits::identities::Zero;
+
+    // g = 0
+    let message = "Big Yellow Submarine";
+    let another_message = "Any other string";
+    let d = dsa::DSA::new(Some(BigUint::zero()));
+    let signature = d.sign(message.as_bytes());
+    assert!(d.verify(message.as_bytes(), signature.clone()));
+    assert!(d.verify(another_message.as_bytes(), signature));
+
+    // g = p + 1
+    let d = dsa::DSA::new(Some(dsa::p() + 1u8));
+    let magic_signature = dsa::magic_signature(&d.public_key);
+    assert!(d.verify("Hello, world".as_bytes(), magic_signature.clone()));
+    assert!(d.verify("Goodbye, world".as_bytes(), magic_signature));
+}

@@ -8,15 +8,18 @@ use crate::sha1;
 pub struct DSA {
     pub public_key: BigUint,
     private_key: BigUint,
+    g: BigUint,
 }
 
 impl DSA {
-    pub fn new() -> Self {
+    pub fn new(generator: Option<BigUint>) -> Self {
+        let g = generator.unwrap_or(g());
         let x = thread_rng().gen_biguint_range(&BigUint::one(), &q());
-        let y = g().modpow(&x, &p());
+        let y = g.modpow(&x, &p());
         DSA {
             public_key: y,
             private_key: x,
+            g: g,
         }
     }
 
@@ -24,33 +27,26 @@ impl DSA {
         DSA {
             public_key: public_key,
             private_key: BigUint::zero(),
+            g: g(),
         }
     }
 
     pub fn sign(&self, m: &[u8]) -> (BigUint, BigUint) {
-        let mut r = BigUint::zero();
-        let mut s = BigUint::zero();
-
         let H_m = BigUint::from_bytes_be(&sha1::hash(m));
-
-        while r == BigUint::zero() || s == BigUint::zero() {
-            let k = thread_rng().gen_biguint_range(&BigUint::one(), &q());
-            r = g().modpow(&k, &p()) % q();
-            s = ((H_m.clone() + self.private_key.clone() * r.clone()) * math::invmod(&k, &q()))
-                % q();
-        }
+        let k = thread_rng().gen_biguint_range(&BigUint::one(), &q());
+        let r = self.g.modpow(&k, &p()) % q();
+        let s =
+            ((H_m.clone() + self.private_key.clone() * r.clone()) * math::invmod(&k, &q())) % q();
         (r, s)
     }
 
     pub fn verify(&self, m: &[u8], (r, s): (BigUint, BigUint)) -> bool {
-        assert!(r > BigUint::zero() && r < q());
-        assert!(s > BigUint::zero() && s < q());
-
         let H_m = BigUint::from_bytes_be(&sha1::hash(m));
         let w = math::invmod(&s, &q());
         let u1 = (H_m * w.clone()) % q();
         let u2 = (r.clone() * w) % q();
-        let v = ((g().modpow(&u1, &p()) * self.public_key.clone().modpow(&u2, &p())) % p()) % q();
+        let v =
+            ((self.g.modpow(&u1, &p()) * self.public_key.clone().modpow(&u2, &p())) % p()) % q();
 
         v == r
     }
@@ -112,7 +108,14 @@ pub fn recover_private_key_repeated_nonce(
     x
 }
 
-fn p() -> BigUint {
+pub fn magic_signature(public_key: &BigUint) -> (BigUint, BigUint) {
+    let r = public_key.modpow(&BigUint::one(), &p()) % q();
+    let s = r.clone() * math::invmod(&BigUint::one(), &q()) % q();
+
+    (r, s)
+}
+
+pub fn p() -> BigUint {
     BigUint::from_bytes_be(&hex::decode("800000000000000089e1855218a0e7dac38136ffafa72eda7859f2171e25e65eac698c1702578b07dc2a1076da241c76c62d374d8389ea5aeffd3226a0530cc565f3bf6b50929139ebeac04f48c3c84afb796d61e5a4f9a8fda812ab59494232c7d2b4deb50aa18ee9e132bfa85ac4374d7f9091abc3d015efc871a584471bb1").unwrap())
 }
 
@@ -127,7 +130,7 @@ fn g() -> BigUint {
 #[test]
 fn dsa() {
     let message = "BIG YELLOW SUBMARINE";
-    let d = DSA::new();
+    let d = DSA::new(None);
 
     let signature = d.sign(message.as_bytes());
     assert!(d.verify(message.as_bytes(), signature))
