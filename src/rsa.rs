@@ -1,5 +1,6 @@
 use num_bigint::BigUint;
 use num_traits::cast::FromPrimitive;
+use num_traits::identities::One;
 use openssl::bn::BigNum;
 
 use crate::encoding;
@@ -11,6 +12,10 @@ pub struct RSA {
     pub public_key: (BigUint, BigUint),
     /// (d, n) tuple
     private_key: (BigUint, BigUint),
+}
+
+pub trait ParityOracle {
+    fn parity_oracle(&self, ciphertext: &[u8]) -> bool;
 }
 
 impl RSA {
@@ -117,6 +122,12 @@ impl RSA {
     }
 }
 
+impl ParityOracle for RSA {
+    fn parity_oracle(&self, ciphertext: &[u8]) -> bool {
+        self.decrypt(ciphertext).last().unwrap() & 1 == 0
+    }
+}
+
 fn generate_random_prime() -> BigUint {
     let mut b = BigNum::new().unwrap();
     b.generate_prime(1024, false, None, None).unwrap();
@@ -194,4 +205,42 @@ pub fn forge_rsa_signature(message: String) -> Vec<u8> {
     }
 
     BigUint::from_bytes_be(&out).nth_root(3).to_bytes_be()
+}
+
+pub fn parity_oracle_attack<O: ParityOracle>(
+    ciphertext: &[u8],
+    (e, n): (BigUint, BigUint),
+    oracle: O,
+) -> Vec<u8> {
+    use num_traits::pow::Pow;
+    let mut multiple = BigUint::from_u64(2)
+        .unwrap()
+        .pow(BigUint::from_u64(1500).unwrap());
+    let mut upper_bound = n.clone() / multiple.clone();
+    let mut lower_bound = BigUint::from_u64(0).unwrap();
+    let ciphernum = BigUint::from_bytes_be(ciphertext);
+
+    while (upper_bound.clone() - lower_bound.clone()) > BigUint::one() {
+        let t = ciphernum.clone() * multiple.modpow(&e, &n);
+
+        let diff = (upper_bound.clone() - lower_bound.clone()) / 2u8;
+        if oracle.parity_oracle(&t.to_bytes_be()) {
+            upper_bound = upper_bound.clone() - diff;
+        } else {
+            lower_bound = lower_bound.clone() + diff;
+        }
+        multiple *= 2u8;
+    }
+
+    // TODO: Solution converges to plaintext/2 for some reason, so double it
+    let upper_bound = upper_bound.clone() * 2u32;
+    let lower_bound = lower_bound.clone() * 2u32;
+
+    // figure out which bound has the same parity as the plaintext and return it
+    let is_plaintext_even = oracle.parity_oracle(&ciphertext);
+    if is_plaintext_even && upper_bound.clone().to_bytes_be().last().unwrap() & 1 == 0 {
+        upper_bound.to_bytes_be()
+    } else {
+        lower_bound.to_bytes_be()
+    }
 }

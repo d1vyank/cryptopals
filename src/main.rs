@@ -671,3 +671,16 @@ fn dsa_parameter_tampering() {
     assert!(d.verify("Hello, world".as_bytes(), magic_signature.clone()));
     assert!(d.verify("Goodbye, world".as_bytes(), magic_signature));
 }
+
+// Set 6 Challenge 46
+#[ignore]
+#[test]
+fn rsa_parity_oracle() {
+    let plaintext = base64::decode("VGhhdCdzIHdoeSBJIGZvdW5kIHlvdSBkb24ndCBwbGF5IGFyb3VuZCB3aXRoIHRoZSBGdW5reSBDb2xkIE1lZGluYQ==").unwrap();
+
+    let r = rsa::RSA::new();
+    let ciphertext = r.encrypt(&plaintext);
+    let decrypted = rsa::parity_oracle_attack(&ciphertext, r.public_key.clone(), r);
+
+    assert_eq!(plaintext, decrypted);
+}
