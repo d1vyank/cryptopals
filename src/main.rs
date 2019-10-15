@@ -534,7 +534,7 @@ fn simplified_srp_dict_attack() {
 #[test]
 fn rsa() {
     let plaintext = "BIG YELLOW SUBMARINE";
-    let r = rsa::RSA::new();
+    let r = rsa::RSA::new(2048);
     let ciphertext = r.encrypt(plaintext.as_bytes());
     let decrypted = r.decrypt(&ciphertext);
 
@@ -565,7 +565,7 @@ fn rsa_unpadded_message_recovery() {
 #[test]
 fn rsa_signature_forgery() {
     let plaintext = "BIG YELLOW SUBMARINE";
-    let r = rsa::RSA::new();
+    let r = rsa::RSA::new(2048);
 
     let signature = r.sign(plaintext.as_bytes());
     let verified_plaintext = r.verify(&signature);
@@ -678,9 +678,21 @@ fn dsa_parameter_tampering() {
 fn rsa_parity_oracle() {
     let plaintext = base64::decode("VGhhdCdzIHdoeSBJIGZvdW5kIHlvdSBkb24ndCBwbGF5IGFyb3VuZCB3aXRoIHRoZSBGdW5reSBDb2xkIE1lZGluYQ==").unwrap();
 
-    let r = rsa::RSA::new();
+    let r = rsa::RSA::new(2048);
     let ciphertext = r.encrypt(&plaintext);
     let decrypted = rsa::parity_oracle_attack(&ciphertext, r.public_key.clone(), r);
 
     assert_eq!(plaintext, decrypted);
+}
+
+// Set 6 Challenge 47
+#[test]
+fn rsa_padding_oracle_attack() {
+    rsa::pkcs_padding_oracle_attack(256);
+}
+
+// Set 6 Challenge 48
+#[test]
+fn rsa_padding_oracle_attack2() {
+    rsa::pkcs_padding_oracle_attack(768);
 }
