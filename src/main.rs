@@ -693,6 +693,7 @@ fn rsa_padding_oracle_attack() {
 
 // Set 6 Challenge 48
 #[test]
+#[ignore]
 fn rsa_padding_oracle_attack2() {
     rsa::pkcs_padding_oracle_attack(768);
 }
