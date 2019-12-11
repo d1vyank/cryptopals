@@ -77,7 +77,7 @@ $ cargo test
 
 ## Set 7: Hashes
 
-- [ ] Challenge 49: CBC-MAC Message Forgery
+- [x] Challenge 49: CBC-MAC Message Forgery
 - [ ] Challenge 50: Hashing with CBC-MAC
 - [ ] Challenge 51: Compression Ratio Side-Channel Attacks
 - [ ] Challenge 52: Iterated Hash Function Multicollisions

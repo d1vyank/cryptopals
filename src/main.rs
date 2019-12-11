@@ -687,6 +687,7 @@ fn rsa_parity_oracle() {
 
 // Set 6 Challenge 47
 #[test]
+#[ignore]
 fn rsa_padding_oracle_attack() {
     rsa::pkcs_padding_oracle_attack(256);
 }
@@ -696,4 +697,37 @@ fn rsa_padding_oracle_attack() {
 #[ignore]
 fn rsa_padding_oracle_attack2() {
     rsa::pkcs_padding_oracle_attack(768);
+}
+
+// Set 7 Challenge 49
+#[test]
+fn cbc_mac_forgery() {
+    use aes128::cbc_mac;
+    let shared_key = b"YELLOW SUBMARINE";
+
+    let message = cbc_mac::generate_message(shared_key);
+    assert_eq!(
+        cbc_mac::validate_message(shared_key, message.clone()),
+        1234,
+        "Invalid initial Sender ID"
+    );
+
+    let forged_message = cbc_mac::forge_mac_controlled_iv(message);
+    assert_eq!(
+        cbc_mac::validate_message(shared_key, forged_message),
+        1337,
+        "Invalid forged Sender ID"
+    );
+
+    let message =
+        cbc_mac::generate_v2_message(shared_key, "someone", ["me:10", "them:20"].to_vec());
+    let (from, txns) = cbc_mac::validate_v2_message(shared_key, message.clone());
+    assert_eq!(from, "someone");
+    assert_eq!(txns, "me:10;them:20");
+
+    let self_transfer = cbc_mac::generate_v2_message(shared_key, "me", ["me:10000000"].to_vec());
+    let forged_message = cbc_mac::length_extension_attack(message, self_transfer);
+    let (from, txns) = cbc_mac::validate_v2_message(shared_key, forged_message);
+    assert_eq!(from, "someone");
+    assert!(txns.contains("me:10000000"));
 }

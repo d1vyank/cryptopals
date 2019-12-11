@@ -738,3 +738,105 @@ pub mod insecure_cbc_iv_attack {
         Ok(())
     }
 }
+
+pub mod cbc_mac {
+    use super::*;
+    use url::form_urlencoded;
+    fn compute(iv: &[u8], key: &[u8], bytes: &[u8]) -> Vec<u8> {
+        let ciphertext = super::cbc::encrypt(bytes, key, iv).unwrap();
+        // The last block of the CBC-encrypted ciphertext is the MAC
+        ciphertext[ciphertext.len() - 16..].to_vec()
+    }
+
+    pub fn generate_message(shared_key: &[u8]) -> Vec<u8> {
+        let message = form_urlencoded::Serializer::new(String::new())
+            .append_pair("from", "1234")
+            .append_pair("to", "5678")
+            .append_pair("amount", "55")
+            .finish();
+        let iv: [u8; 16] = rand::rngs::SmallRng::seed_from_u64(1234).gen();
+        let mac = compute(&iv, shared_key, message.as_bytes());
+
+        [message.as_bytes(), &iv, &mac].concat()
+    }
+
+    pub fn generate_v2_message(shared_key: &[u8], from: &str, txns: Vec<&str>) -> Vec<u8> {
+        let message = form_urlencoded::Serializer::new(String::new())
+            .append_pair("from", from)
+            .append_pair("tx_list", &txns.join(";"))
+            .finish();
+        let iv: [u8; 16] = [0; 16];
+        let mac = compute(&iv, shared_key, message.as_bytes());
+
+        [message.as_bytes(), &mac].concat()
+    }
+
+    pub fn validate_message(shared_key: &[u8], message: Vec<u8>) -> u32 {
+        let (mac, iv, message) = parse_wire_format(message);
+        assert_eq!(
+            compute(&iv, shared_key, &message),
+            mac,
+            "mac validation failed"
+        );
+
+        form_urlencoded::parse(&message)
+            .into_owned()
+            .collect::<HashMap<String, String>>()["from"]
+            .parse()
+            .unwrap()
+    }
+
+    pub fn validate_v2_message(shared_key: &[u8], message: Vec<u8>) -> (String, String) {
+        let mac = &message[message.len() - 16..];
+        let message = &message[..message.len() - 16];
+        assert_eq!(
+            compute(&[0; 16], shared_key, message),
+            mac,
+            "mac validation failed"
+        );
+
+        let params = form_urlencoded::parse(message)
+            .into_owned()
+            .collect::<HashMap<String, String>>();
+
+        (params["from"].clone(), params["tx_list"].clone())
+    }
+
+    pub fn forge_mac_controlled_iv(valid_message: Vec<u8>) -> Vec<u8> {
+        let (mac, iv, mut message) = parse_wire_format(valid_message);
+        // find xor distance between first block of message and IV
+        // this can be kept constant while manipulating the message
+        // by changing the IV appropriately
+        let distance = xor::fixed_xor(&message[0..16], &iv);
+        // change sender account number to '1337'
+        message.splice(5..9, "1337".as_bytes().to_vec());
+        let new_iv = xor::fixed_xor(&message[0..16], &distance);
+
+        [message, new_iv, mac].concat()
+    }
+
+    pub fn length_extension_attack(valid_message: Vec<u8>, newMessage: Vec<u8>) -> Vec<u8> {
+        let mut m0 = valid_message[..valid_message.len() - 16].to_vec();
+        let t0 = &valid_message[valid_message.len() - 16..];
+        let m1_block1 = &newMessage[..16];
+
+        // pkcs7 encode original message
+        let size = m0.len() + (16 - m0.len() % 16);
+        encoding::pkcs7_encode(&mut m0, size);
+
+        [&m0, &xor::fixed_xor(t0, m1_block1), &newMessage[16..]].concat()
+    }
+
+    // message||iv||mac
+    fn parse_wire_format(message: Vec<u8>) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        assert!(message.len() > 32);
+        // mac is the last 16 bytes
+        let mac = message[message.len() - 16..].to_vec();
+        // iv is the 16 bytes before the mac
+        let iv = message[message.len() - 32..message.len() - 16].to_vec();
+        // message is the rest
+        let message = message[..message.len() - 32].to_vec();
+
+        (mac, iv, message)
+    }
+}
