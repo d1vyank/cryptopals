@@ -731,3 +731,26 @@ fn cbc_mac_forgery() {
     assert_eq!(from, "someone");
     assert!(txns.contains("me:10000000"));
 }
+
+// Set 7 Challenge 50
+#[test]
+fn cbc_mac_hash_collision() {
+    use aes128::cbc_mac;
+
+    let message = "alert('MZA who was that?');\n";
+    let new_message = "alert('Ayo, the Wu is back!');/*";
+    let iv = [0; 16];
+    let key = b"YELLOW SUBMARINE";
+
+    let original_hash = cbc_mac::compute(&iv, key, message.as_bytes());
+    let forged_message =
+        cbc_mac::hash_collision(key, original_hash.clone(), new_message.as_bytes().to_vec());
+
+    assert_eq!(
+        cbc_mac::compute(&iv, key, &forged_message),
+        original_hash,
+        "forged message hash must match original hash"
+    );
+
+    assert!(encoding::ascii_encode(&forged_message).starts_with(new_message));
+}

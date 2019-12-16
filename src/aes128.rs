@@ -742,7 +742,7 @@ pub mod insecure_cbc_iv_attack {
 pub mod cbc_mac {
     use super::*;
     use url::form_urlencoded;
-    fn compute(iv: &[u8], key: &[u8], bytes: &[u8]) -> Vec<u8> {
+    pub fn compute(iv: &[u8], key: &[u8], bytes: &[u8]) -> Vec<u8> {
         let ciphertext = super::cbc::encrypt(bytes, key, iv).unwrap();
         // The last block of the CBC-encrypted ciphertext is the MAC
         ciphertext[ciphertext.len() - 16..].to_vec()
@@ -821,10 +821,26 @@ pub mod cbc_mac {
         let m1_block1 = &newMessage[..16];
 
         // pkcs7 encode original message
-        let size = m0.len() + (16 - m0.len() % 16);
-        encoding::pkcs7_encode(&mut m0, size);
+        encoding::pkcs7_encode(&mut m0, 16);
 
         [&m0, &xor::fixed_xor(t0, m1_block1), &newMessage[16..]].concat()
+    }
+
+    pub fn hash_collision(key: &[u8], original_hash: Vec<u8>, new_snippet: Vec<u8>) -> Vec<u8> {
+        let new_message_hash = compute(&[0; 16], key, &new_snippet);
+        let decrypted_hash = super::cbc::decrypt_pad(&original_hash, key, &[0; 16], false).unwrap();
+        let last_block = "AAAAAAAAAAAAAA".as_bytes();
+        let last_block_padded = "AAAAAAAAAAAAAA\x02\x02".as_bytes();
+
+        let second_last_block = xor::fixed_xor(&decrypted_hash, &last_block_padded);
+        let second_last_block =
+            super::cbc::decrypt_pad(&second_last_block, &key, &[0; 16], false).unwrap();
+        let second_last_block = xor::fixed_xor(&second_last_block, &new_message_hash);
+
+        let mut new_message_padded = new_snippet.clone();
+        encoding::pkcs7_encode(&mut new_message_padded, 16);
+
+        [&new_message_padded, &second_last_block, last_block].concat()
     }
 
     // message||iv||mac
