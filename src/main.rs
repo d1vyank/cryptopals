@@ -6,6 +6,7 @@ extern crate rocket;
 
 mod aes128;
 mod bits;
+mod compression;
 mod dh;
 mod dsa;
 mod encoding;
@@ -753,4 +754,23 @@ fn cbc_mac_hash_collision() {
     );
 
     assert!(encoding::ascii_encode(&forged_message).starts_with(new_message));
+}
+
+// Set 7 Challenge 51
+#[test]
+fn compression_side_channel_attack_stream() {
+    let sessionID = "TmV2ZXIgcmV2ZWFsIHRoZSBXdS1UYW5nIFNlY3JldCE=";
+
+    let leaked_id = compression::side_channel::attack_stream_cipher();
+    assert_eq!(leaked_id, sessionID);
+}
+
+// Set 7 Challenge 51
+#[test]
+#[ignore]
+fn compression_side_channel_attack_block() {
+    let sessionID = "TmV2ZXIgcmV2ZWFsIHRoZSBXdS1UYW5nIFNlY3JldCE=";
+
+    let leaked_id = compression::side_channel::attack_block_cipher();
+    assert_eq!(leaked_id, sessionID);
 }
